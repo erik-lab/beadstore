@@ -45,7 +45,10 @@ export interface Product {
   id: string;
   name: string;
   category_id: string;
+  category_name?: string | null;
   subtype_id: string | null;
+  subtype_name?: string | null;
+  custom_subtype?: string | null;
   description: string | null;
   sku: string | null;
   material: string | null;
@@ -161,6 +164,13 @@ export interface ReceiveResult {
   purchase_order_id: string;
   purchase_order_status: string;
   summary: Record<string, number>;
+}
+
+export interface Hint {
+  id: string;
+  page: string;
+  item_key: string;
+  text: string;
 }
 
 export interface OperationsSummary {

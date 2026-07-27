@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.db import SessionLocal
 from app.models.enums import ActiveArchivedStatus, InventoryUnitStatus, UnitType
+from app.models.hint import Hint
 from app.models.inventory_unit import InventoryUnit
 from app.models.location import Location
 from app.models.product import Product
@@ -20,6 +21,15 @@ from app.services.receiving_service import UNKNOWN_VENDOR_NAME
 CATEGORY_SUBTYPES = {
     "Beads": ["Round", "Faceted", "Seed Bead", "Rondelle"],
     "Findings": ["Clasp", "Jump Ring", "Ear Wire", "Crimp"],
+}
+
+DASHBOARD_HINTS = {
+    "active_products": "The number of products marked Active (not archived) in your catalog.",
+    "inventory_on_hand": "Total inventory units currently Available or Reserved — your actual stock on hand.",
+    "open_orders": "Supplier orders that are still Draft, Ordered, or Partially Received — not yet fully received.",
+    "unresolved_items": "Received items that don't have a matching product yet. Match them from this list so they show up correctly everywhere else.",
+    "receiving_discrepancies": "Received items that didn't cleanly match what was expected — shortages, overages, damaged items, or substitutions.",
+    "total_receipts": "The total number of receiving events recorded, including partial receipts and quick receives.",
 }
 
 
@@ -98,6 +108,12 @@ def run():
                 )
             )
             db.commit()
+
+        for item_key, text in DASHBOARD_HINTS.items():
+            existing = db.query(Hint).filter(Hint.page == "dashboard", Hint.item_key == item_key).first()
+            if existing is None:
+                db.add(Hint(page="dashboard", item_key=item_key, text=text))
+        db.commit()
 
         print("Seed complete.")
     finally:

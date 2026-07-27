@@ -27,6 +27,9 @@ import { OpenOrdersPage } from "./pages/operations/OpenOrdersPage";
 import { InventoryOnHandPage } from "./pages/operations/InventoryOnHandPage";
 import { UnresolvedItemsPage } from "./pages/operations/UnresolvedItemsPage";
 import { DiscrepanciesPage } from "./pages/operations/DiscrepanciesPage";
+import { UtilitiesPage } from "./pages/utilities/UtilitiesPage";
+import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
+import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
 
 function App() {
   return (
@@ -78,6 +81,10 @@ function App() {
           <Route path="operations/inventory-on-hand" element={<InventoryOnHandPage />} />
           <Route path="operations/unresolved-items" element={<UnresolvedItemsPage />} />
           <Route path="operations/receiving-discrepancies" element={<DiscrepanciesPage />} />
+
+          <Route path="utilities" element={<UtilitiesPage />} />
+          <Route path="utilities/hints" element={<HintsMaintenancePage />} />
+          <Route path="utilities/categories" element={<CategoryMaintenancePage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

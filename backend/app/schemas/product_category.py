@@ -9,6 +9,10 @@ class ProductCategoryCreate(BaseModel):
     name: str
 
 
+class ProductCategoryUpdate(BaseModel):
+    name: str
+
+
 class ProductCategoryRead(ORMModel):
     id: uuid.UUID
     name: str
@@ -16,6 +20,10 @@ class ProductCategoryRead(ORMModel):
 
 class ProductSubtypeCreate(BaseModel):
     category_id: uuid.UUID
+    name: str
+
+
+class ProductSubtypeUpdate(BaseModel):
     name: str
 
 

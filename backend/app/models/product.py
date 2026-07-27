@@ -1,11 +1,12 @@
 import uuid
 
 from sqlalchemy import Enum, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.enums import ActiveArchivedStatus, ImageStatus
 from app.models.mixins import AuditMixin, TimestampMixin, UUIDPKMixin
+from app.models.product_category import ProductCategory, ProductSubtype
 
 
 class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -14,6 +15,9 @@ class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("product_categories.id"), nullable=False)
     subtype_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("product_subtypes.id"), nullable=True)
+    # Free-text subtype captured when "Other" is chosen in the subtype picker,
+    # instead of formally adding a one-off row to the shared subtype list.
+    custom_subtype: Mapped[str | None] = mapped_column(String(100), nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     sku: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
 
@@ -41,3 +45,16 @@ class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
         default=ActiveArchivedStatus.active,
         nullable=False,
     )
+
+    category: Mapped[ProductCategory] = relationship(viewonly=True, lazy="joined")
+    subtype: Mapped[ProductSubtype | None] = relationship(viewonly=True, lazy="joined")
+
+    @property
+    def category_name(self) -> str | None:
+        return self.category.name if self.category else None
+
+    @property
+    def subtype_name(self) -> str | None:
+        if self.subtype:
+            return self.subtype.name
+        return self.custom_subtype

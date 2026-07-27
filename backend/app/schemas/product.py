@@ -26,6 +26,7 @@ class ProductCreate(ProductAttributes):
     name: str
     category_id: uuid.UUID
     subtype_id: uuid.UUID | None = None
+    custom_subtype: str | None = None
     description: str | None = None
     sku: str | None = None
     image_url: str | None = None
@@ -37,6 +38,7 @@ class ProductUpdate(BaseModel):
     name: str | None = None
     category_id: uuid.UUID | None = None
     subtype_id: uuid.UUID | None = None
+    custom_subtype: str | None = None
     description: str | None = None
     sku: str | None = None
     material: str | None = None
@@ -61,7 +63,10 @@ class ProductRead(ORMModel):
     id: uuid.UUID
     name: str
     category_id: uuid.UUID
+    category_name: str | None = None
     subtype_id: uuid.UUID | None
+    subtype_name: str | None = None
+    custom_subtype: str | None = None
     description: str | None
     sku: str | None
     material: str | None

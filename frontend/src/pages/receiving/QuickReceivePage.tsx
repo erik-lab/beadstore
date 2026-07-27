@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { Product, ReceiveResult, Vendor } from "../../lib/types";
@@ -19,6 +19,7 @@ function emptyLine(): LineDraft {
 }
 
 export function QuickReceivePage() {
+  const navigate = useNavigate();
   const vendors = useFetch(() => api.get<Vendor[]>("/vendors?limit=200"), []);
   const products = useFetch(() => api.get<Product[]>("/products?limit=200"), []);
 
@@ -202,9 +203,14 @@ export function QuickReceivePage() {
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
 
-        <button className="btn-primary" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? "Saving..." : "Record Receipt"}
-        </button>
+        <div className="form-actions line-row">
+          <button className="btn-primary" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? "Saving..." : "Record Receipt"}
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => navigate("/purchase-orders")}>
+            Cancel
+          </button>
+        </div>
       </div>
     </div>
   );

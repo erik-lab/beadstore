@@ -329,6 +329,7 @@ legend {
 }
 
 .stat-card {
+  position: relative;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -336,6 +337,20 @@ legend {
   text-decoration: none;
   color: var(--text-h);
   display: block;
+}
+
+.stat-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  padding-right: 16px;
+}
+
+.stat-card .info-hint {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  margin-left: 0;
 }
 
 .stat-value {
@@ -347,6 +362,73 @@ legend {
   font-size: 13px;
   color: var(--text);
   margin-top: 4px;
+}
+
+.stat-card-utility {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--accent);
+  border-style: dashed;
+}
+
+.info-hint {
+  position: relative;
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.info-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--muted-bg);
+  color: var(--text);
+  font-size: 11px;
+  font-style: italic;
+  font-family: Georgia, serif;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.info-hint-icon:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.info-hint-popover {
+  position: absolute;
+  z-index: 20;
+  top: 22px;
+  left: 0;
+  width: 220px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text);
+  box-shadow: var(--shadow, 0 4px 12px rgba(0, 0, 0, 0.15));
+  text-align: left;
+}
+
+.maintenance-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.maintenance-row .grow {
+  flex: 1;
 }
 
 .badge {

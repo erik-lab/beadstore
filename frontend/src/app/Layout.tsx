@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: "/purchase-orders", label: "Supplier Orders" },
   { to: "/receiving/quick-receive", label: "Quick Receive" },
   { to: "/locations", label: "Locations" },
+  { to: "/utilities", label: "Utilities" },
 ];
 
 export function Layout() {

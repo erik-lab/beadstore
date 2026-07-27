@@ -51,6 +51,8 @@ export function ProductsListPage() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Category</th>
+              <th>Subtype</th>
               <th>Material</th>
               <th>Color</th>
               <th>Status</th>
@@ -62,6 +64,8 @@ export function ProductsListPage() {
                 <td>
                   <Link to={`/products/${p.id}`}>{p.name}</Link>
                 </td>
+                <td>{p.category_name ?? "—"}</td>
+                <td>{p.subtype_name ?? "—"}</td>
                 <td>{p.material ?? "—"}</td>
                 <td>{p.color ?? "—"}</td>
                 <td>

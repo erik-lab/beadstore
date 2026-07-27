@@ -1,4 +1,5 @@
 from app.models.catalog_listing import CatalogListing
+from app.models.hint import Hint
 from app.models.inventory_adjustment import InventoryAdjustment
 from app.models.inventory_unit import InventoryUnit
 from app.models.location import Location
@@ -11,6 +12,7 @@ from app.models.vendor import Vendor
 
 __all__ = [
     "CatalogListing",
+    "Hint",
     "InventoryAdjustment",
     "InventoryUnit",
     "Location",

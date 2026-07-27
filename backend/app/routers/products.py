@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import Column
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -18,6 +19,38 @@ from app.schemas.purchase_order import PurchaseOrderLineRead
 from app.schemas.receiving import ReceiptLineRead
 
 router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
+
+# Optional attribute fields eligible for the "hybrid pick list" (type-ahead of
+# previously used values, or type a new one). Whitelisted explicitly rather
+# than accepting an arbitrary column name from the client.
+ATTRIBUTE_FIELDS: dict[str, Column] = {
+    "material": Product.material,
+    "color": Product.color,
+    "size": Product.size,
+    "shape": Product.shape,
+    "finish": Product.finish,
+    "hole_size": Product.hole_size,
+    "origin": Product.origin,
+    "strand_length": Product.strand_length,
+    "count": Product.count,
+    "grade": Product.grade,
+    "condition": Product.condition,
+}
+
+
+@router.get("/attribute-options", response_model=list[str])
+def get_attribute_options(db: Session = Depends(get_db), field: str = Query(...)):
+    column = ATTRIBUTE_FIELDS.get(field)
+    if column is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown attribute field '{field}'")
+    rows = (
+        db.query(column)
+        .filter(column.isnot(None), column != "")
+        .distinct()
+        .order_by(column)
+        .all()
+    )
+    return [value for (value,) in rows]
 
 
 @router.get("", response_model=list[ProductRead])

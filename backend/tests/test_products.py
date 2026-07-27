@@ -132,3 +132,83 @@ def test_product_detail_shows_purchase_order_and_receipt_history(client, auth_he
     assert len(receipt_lines) == 1
     assert receipt_lines[0]["vendor_name"] == "Stonecraft Supply"
     assert receipt_lines[0]["receiving_status"] == "matched"
+
+
+def test_product_resolves_category_and_subtype_names(client, auth_headers):
+    category = client.post("/api/v1/product-categories", json={"name": "Beads"}, headers=auth_headers).json()
+    subtype = client.post(
+        "/api/v1/product-subtypes",
+        json={"category_id": category["id"], "name": "Faceted"},
+        headers=auth_headers,
+    ).json()
+    product = client.post(
+        "/api/v1/products",
+        json={"name": "6mm Faceted Bead", "category_id": category["id"], "subtype_id": subtype["id"]},
+        headers=auth_headers,
+    ).json()
+
+    assert product["category_name"] == "Beads"
+    assert product["subtype_name"] == "Faceted"
+
+    resp = client.get("/api/v1/products", headers=auth_headers)
+    listed = next(p for p in resp.json() if p["id"] == product["id"])
+    assert listed["category_name"] == "Beads"
+    assert listed["subtype_name"] == "Faceted"
+
+
+def test_product_custom_subtype_used_when_no_formal_subtype(client, auth_headers):
+    category = client.post("/api/v1/product-categories", json={"name": "Beads"}, headers=auth_headers).json()
+    product = client.post(
+        "/api/v1/products",
+        json={"name": "Odd bead", "category_id": category["id"], "custom_subtype": "Irregular chip"},
+        headers=auth_headers,
+    ).json()
+
+    assert product["subtype_id"] is None
+    assert product["custom_subtype"] == "Irregular chip"
+    assert product["subtype_name"] == "Irregular chip"
+
+
+def test_rename_category_and_subtype(client, auth_headers):
+    category = client.post("/api/v1/product-categories", json={"name": "Beads"}, headers=auth_headers).json()
+    subtype = client.post(
+        "/api/v1/product-subtypes",
+        json={"category_id": category["id"], "name": "Round"},
+        headers=auth_headers,
+    ).json()
+
+    resp = client.patch(f"/api/v1/product-categories/{category['id']}", json={"name": "Beads (Renamed)"}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Beads (Renamed)"
+
+    resp = client.patch(f"/api/v1/product-subtypes/{subtype['id']}", json={"name": "Round (Renamed)"}, headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Round (Renamed)"
+
+
+def test_attribute_options_returns_distinct_used_values(client, auth_headers):
+    category = client.post("/api/v1/product-categories", json={"name": "Beads"}, headers=auth_headers).json()
+    client.post(
+        "/api/v1/products",
+        json={"name": "Bead A", "category_id": category["id"], "color": "Blue"},
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/products",
+        json={"name": "Bead B", "category_id": category["id"], "color": "Blue"},
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/products",
+        json={"name": "Bead C", "category_id": category["id"], "color": "Green"},
+        headers=auth_headers,
+    )
+
+    resp = client.get("/api/v1/products/attribute-options?field=color", headers=auth_headers)
+    assert resp.status_code == 200
+    assert sorted(resp.json()) == ["Blue", "Green"]
+
+
+def test_attribute_options_rejects_unknown_field(client, auth_headers):
+    resp = client.get("/api/v1/products/attribute-options?field=not_a_real_field", headers=auth_headers)
+    assert resp.status_code == 400

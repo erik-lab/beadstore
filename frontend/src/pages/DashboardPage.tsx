@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
 import { api } from "../lib/apiClient";
 import { useFetch } from "../lib/useFetch";
-import type { OperationsSummary } from "../lib/types";
+import type { Hint, OperationsSummary } from "../lib/types";
 import { Loading, ErrorState } from "../components/States";
+import { InfoHint } from "../components/InfoHint";
 
 const CARDS: { key: keyof OperationsSummary; label: string; to: string }[] = [
   { key: "active_products", label: "Active Products", to: "/products" },
@@ -15,6 +16,9 @@ const CARDS: { key: keyof OperationsSummary; label: string; to: string }[] = [
 
 export function DashboardPage() {
   const summary = useFetch(() => api.get<OperationsSummary>("/operations/summary"), []);
+  const hints = useFetch(() => api.get<Hint[]>("/hints?page=dashboard"), []);
+
+  const hintFor = (key: string) => hints.data?.find((h) => h.item_key === key)?.text;
 
   return (
     <div>
@@ -24,11 +28,17 @@ export function DashboardPage() {
       {summary.data && (
         <div className="card-grid">
           {CARDS.map((card) => (
-            <Link key={card.key} to={card.to} className="stat-card">
-              <div className="stat-value">{summary.data![card.key]}</div>
-              <div className="stat-label">{card.label}</div>
-            </Link>
+            <div key={card.key} className="stat-card">
+              <Link to={card.to} className="stat-card-link">
+                <div className="stat-value">{summary.data![card.key]}</div>
+                <div className="stat-label">{card.label}</div>
+              </Link>
+              <InfoHint text={hintFor(card.key)} />
+            </div>
           ))}
+          <Link to="/utilities" className="stat-card stat-card-utility">
+            Utilities
+          </Link>
         </div>
       )}
     </div>

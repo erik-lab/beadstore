@@ -9,6 +9,7 @@ export function InventoryUnitFormPage() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
+  const cancelTo = isEdit ? `/inventory/${id}` : "/inventory";
 
   const products = useFetch(() => api.get<Product[]>("/products?limit=200"), []);
   const locations = useFetch(() => api.get<Location[]>("/locations"), []);
@@ -167,9 +168,14 @@ export function InventoryUnitFormPage() {
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </label>
 
-        <button type="submit" className="btn-primary" disabled={submitting}>
-          {submitting ? "Saving..." : "Save Inventory Unit"}
-        </button>
+        <div className="form-actions line-row">
+          <button type="submit" className="btn-primary" disabled={submitting}>
+            {submitting ? "Saving..." : "Save Inventory Unit"}
+          </button>
+          <button type="button" className="btn-secondary" onClick={() => navigate(cancelTo)}>
+            Cancel
+          </button>
+        </div>
       </form>
     </div>
   );
