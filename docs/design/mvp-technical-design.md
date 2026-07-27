@@ -1,6 +1,6 @@
 # Patti Back Office MVP — Technical Design Proposal
 
-Status: **Proposal — awaiting Erik/Patti review**
+Status: **Approved for implementation** (amendments incorporated below)
 Scope: Internal back-office system for inventory, product, catalog, supplier order, and receiving management. No customer-facing storefront.
 
 ---
@@ -100,7 +100,7 @@ Scope: Internal back-office system for inventory, product, catalog, supplier ord
 - **Authenticated requests:** `apiClient.ts` attaches `Authorization: Bearer <access_token>` from the current Supabase session to every FastAPI request. Supabase JS handles silent token refresh.
 - **Backend validation:** A FastAPI dependency (`get_current_user`) verifies the JWT signature against `SUPABASE_JWT_SECRET` (HS256) or Supabase's JWKS endpoint (if using RS256/ES256, recommended for newer Supabase projects), checks expiry/audience, and extracts the Supabase user id (`sub`). Every non-auth route depends on this — no anonymous data access.
 - **Unauthenticated blocking:** Backend returns 401 on missing/invalid token; frontend router redirects to `/login` if no active Supabase session, and a route guard wraps all authenticated pages.
-- **Signup mode:** Public self-signup **disabled by default** (`ALLOW_PUBLIC_SIGNUP=false`). MVP behavior: Erik/Patti accounts created directly in Supabase Auth (dashboard or a one-off admin script). If a signup UI is desired later, it's gated behind the flag and/or invite tokens.
+- **Signup mode:** Public self-signup **disabled by default** (`ALLOW_PUBLIC_SIGNUP=false`). Patti and Erik each get their own individually created Supabase Auth account (dashboard or a one-off admin script) — no shared credentials. No role distinction between the two accounts is required for MVP; this is a single-role access model with separate logins, not a shared login. If a signup UI is desired later, it's gated behind the flag and/or invite tokens.
 - **Secrets:** Service-role keys (if ever needed for admin scripts) stay server-side only, never shipped to frontend. Frontend only ever sees `SUPABASE_ANON_KEY`, which is safe to expose (RLS/backend enforcement is what actually protects data — see below).
 - **Data access path:** All data reads/writes go through FastAPI, not direct Supabase client queries from the browser, per shared context. This means Postgres Row Level Security is a defense-in-depth nice-to-have, not the primary access control — the primary control is the JWT-checking FastAPI dependency layer.
 
@@ -119,6 +119,7 @@ Mirrors `auth.users` for app-specific fields.
 ### `vendors`
 - `name` — **(required)**
 - `contact_name`, `email`, `phone`, `notes` — nullable
+- `status` — enum (`active`, `archived`), default `active` — archived rather than deleted once referenced by purchase orders/inventory units
 
 ### `product_categories`
 - `name` — **(required)**, e.g. "Beads", "Findings"
@@ -134,29 +135,31 @@ Mirrors `auth.users` for app-specific fields.
 - `description` — nullable
 - `sku` — nullable, unique if present
 - Optional bead/finding attributes (nullable): `material`, `color`, `size`, `shape`, `finish`, `hole_size`, `origin`, `strand_length`, `count`, `grade`, `condition`
+- `attributes_json` — nullable JSON/JSONB column for future optional attributes not yet promoted to a fixed column
 - `image_url`, `image_status` (enum: `none`, `pending`, `available`), `media_notes` — nullable placeholders, no upload logic
-- `status` — enum (`active`, `archived`), default `active`
+- `status` — enum (`active`, `archived`), default `active` — archiving instead of deleting once a product is referenced by inventory/catalog/PO records
 
-Attribute note: storing bead/finding attributes as typed nullable columns on `products` (rather than a fully generic EAV table) is simpler to build/query for MVP. See Section 10 for the tradeoff and recommendation.
+Attribute note: storing bead/finding attributes as typed nullable columns on `products` (rather than a fully generic EAV table) is simpler to build/query for MVP, with `attributes_json` as an escape hatch for future ad-hoc fields without a migration. See Section 10 for the tradeoff and recommendation.
 
 ### `catalog_listings`
 - `product_id` FK → `products` — **(required)**
 - `title` — **(required)**
 - `listing_description` — nullable
 - `price` — nullable (decimal)
-- `status` — enum (`draft`, `ready`, `retired`), default `draft`
+- `status` — enum (`draft`, `ready`, `retired`, `archived`), default `draft`
 
 ### `locations`
 - `name` — **(required)**, e.g. "Bin A3", "Front Cabinet Drawer 2"
 - `description` — nullable
 - `parent_location_id` FK → `locations` — nullable (allows simple nesting, e.g. shelf → drawer)
+- `status` — enum (`active`, `archived`), default `active` — archived rather than deleted once referenced by inventory units
 
 ### `inventory_units`
 - `product_id` FK → `products` — nullable (unresolved during receiving; see workflow)
 - `unresolved_description` — nullable, used when `product_id` is null
 - `quantity` — **(required)**, numeric
-- `unit_type` — **(required)**, enum (`strand`, `container`, `bag`, `tube`, `lot`, `count`, `gram`, `other`)
-- `status` — **(required)**, enum (`available`, `reserved`, `depleted`, `damaged`, `unresolved`)
+- `unit_type` — **(required)**, enum (`strand`, `container`, `bag`, `tube`, `count`, `gram`, `ounce`, `piece`, `pair`, `set`, `unknown`, `other`, `lot`) — `lot` retained internally for costing use but not surfaced as a normal UI choice (see UI Terminology, Section 6a)
+- `status` — **(required)**, enum (`available`, `reserved`, `depleted`, `damaged`, `unresolved`, `archived`)
 - `received_date` — **(required)**, date
 - `cost_amount`, `cost_currency` — nullable
 - `vendor_id` FK → `vendors` — nullable
@@ -167,11 +170,13 @@ Attribute note: storing bead/finding attributes as typed nullable columns on `pr
 
 ### `purchase_orders`
 - `vendor_id` FK → `vendors` — nullable (**required as a value**: either a real vendor or a placeholder "Unknown Vendor" row — see Section 10)
-- `status` — **(required)**, enum (`draft`, `submitted`, `partially_received`, `received`, `closed`, `cancelled`)
+- `status` — **(required)**, enum (`draft`, `submitted`, `partially_received`, `received`, `closed`, `cancelled`) — internal value stays `submitted`; UI label reads **"Ordered"** (see Section 6a for terminology mapping)
 - `order_date` — **(required)** (defaults to created date if unknown)
 - `expected_date` — nullable
 - `is_retroactive` — boolean, default `false` — set true when auto-created during no-PO receiving
 - `notes` — nullable
+
+`cancelled` doubles as the archive state for purchase orders — no hard delete once a PO has lines/receipts.
 
 ### `purchase_order_lines`
 - `purchase_order_id` FK → `purchase_orders` — **(required)**
@@ -187,6 +192,7 @@ Attribute note: storing bead/finding attributes as typed nullable columns on `pr
 - `received_date` — **(required)**
 - `received_by` FK → `profiles` — nullable
 - `notes` — nullable
+- `voided_at` — nullable timestamp — set instead of deleting a receipt entered in error, preserving the record and any inventory it already generated
 
 ### `receipt_lines`
 - `receipt_id` FK → `receipts` — **(required)**
@@ -198,6 +204,7 @@ Attribute note: storing bead/finding attributes as typed nullable columns on `pr
 - `receiving_status` — **(required)**, enum (`matched`, `overage`, `shortage`, `substitution`, `damaged`, `unresolved`)
 - `discrepancy_notes` — nullable
 - `inventory_unit_id` FK → `inventory_units` — nullable, set once the receipt line generates/updates an inventory unit
+- `voided_at` — nullable timestamp — same correction-without-deletion pattern as `receipts.voided_at`
 
 ### `inventory_adjustments`
 - `inventory_unit_id` FK → `inventory_units` — **(required)**
@@ -223,17 +230,18 @@ Attribute note: storing bead/finding attributes as typed nullable columns on `pr
 ## 5. Supplier Order and Receiving Workflow
 
 1. **Create vendor** — simple form, `name` required.
-2. **Create purchase order** — pick vendor (or leave as "Unknown," see Section 10), set order date, status starts `draft` → `submitted`.
+2. **Create purchase order** — pick vendor (or leave as "Unknown," see Section 10), set order date, status starts `draft` → `submitted` (shown to Patti/Erik as **"Ordered"**).
 3. **Add expected order lines** — each line either linked to an existing product (typeahead search) or a free-text description; optional expected quantity/unit type/unit cost.
 4. **Receive against an existing order:**
    - Open PO → "Receive" action → creates a `receipt` tied to that PO.
    - For each expected line, enter received quantity/unit type.
-   - System reconciles automatically:
-     - received == expected → `matched`
-     - received < expected → `shortage` (line stays `partially_received` on the PO line until resolved or accepted)
+   - System reconciles automatically, covering every discrepancy case required for MVP:
+     - received == expected (no quantity difference) → `matched`
+     - received < expected → `shortage`, including **partial receipt** (line stays `partially_received` on the PO line until resolved or accepted)
      - received > expected → `overage`
      - different item received than expected → user marks `substitution` and can link a different product
      - visibly damaged → user marks `damaged`, still creates inventory unit (status `damaged`) so it's tracked, not silently dropped
+     - received item doesn't match any known product → `unresolved` (an **unresolved received item**, surfaced as **product match needed**)
    - Each receipt line that isn't purely a shortage-with-nothing-received generates one `inventory_unit` (product optionally unresolved) linked back to the receipt line.
    - PO line `status` updates based on cumulative received quantity; PO `status` becomes `partially_received` or `received` once all lines are settled.
 5. **Shortcut receiving (no prior order):**
@@ -265,6 +273,29 @@ Attribute note: storing bead/finding attributes as typed nullable columns on `pr
 
 ---
 
+## 6a. UI Terminology
+
+Internal/database naming can stay technical; the UI uses Patti-friendly language throughout:
+
+| Internal concept | UI wording |
+|---|---|
+| `inventory_units` | Inventory unit / stock record |
+| `unit_type = strand` | Strand |
+| `unit_type = container` | Container |
+| `unit_type = lot` | Not shown as a selectable option; used only where internally needed for costing |
+| `receipt_lines` | Received item |
+| `products` | Product |
+| `catalog_listings` | Catalog listing |
+| `vendors` | Vendor |
+| `purchase_orders` | Supplier order |
+| `purchase_orders.status = submitted` | "Ordered" |
+| `receipts` | Receipt |
+| `receiving_status` values (`shortage`/`overage`/`substitution`/`damaged`/`unresolved`) | Discrepancy (with the specific type shown, e.g. "Shortage") |
+
+`lot` is never presented as a normal dropdown choice; if it's ever needed operationally (e.g. costing rollups) it stays a backend/reporting concept.
+
+---
+
 ## 7. API Endpoints
 
 Base path `/api/v1`. All routes below require auth unless noted.
@@ -273,24 +304,24 @@ Base path `/api/v1`. All routes below require auth unless noted.
 - `GET /auth/me` — current profile from validated JWT
 
 **Vendors**
-- `GET /vendors`, `POST /vendors`, `GET /vendors/{id}`, `PATCH /vendors/{id}`, `DELETE /vendors/{id}` (soft-delete or block if referenced)
+- `GET /vendors`, `POST /vendors`, `GET /vendors/{id}`, `PATCH /vendors/{id}`, `POST /vendors/{id}/archive` (sets `status = archived`; no hard delete once referenced)
 
 **Product categories / subtypes**
 - `GET /product-categories`, `POST /product-categories`
 - `GET /product-categories/{id}/subtypes`, `POST /product-subtypes`
 
 **Products**
-- `GET /products` (filter by category/subtype/status, search by name), `POST /products`, `GET /products/{id}`, `PATCH /products/{id}`, `DELETE /products/{id}`
+- `GET /products` (filter by category/subtype/status, search by name), `POST /products`, `GET /products/{id}`, `PATCH /products/{id}`, `POST /products/{id}/archive`
 
 **Catalog listings**
-- `GET /catalog-listings`, `POST /catalog-listings`, `GET /catalog-listings/{id}`, `PATCH /catalog-listings/{id}`, `DELETE /catalog-listings/{id}`
+- `GET /catalog-listings`, `POST /catalog-listings`, `GET /catalog-listings/{id}`, `PATCH /catalog-listings/{id}`, `POST /catalog-listings/{id}/archive`
 
 **Inventory units**
 - `GET /inventory-units` (filter by product/location/status), `POST /inventory-units`, `GET /inventory-units/{id}`, `PATCH /inventory-units/{id}`
 - `POST /inventory-units/{id}/adjustments` — create adjustment + apply quantity delta
 
 **Locations**
-- `GET /locations`, `POST /locations`, `GET /locations/{id}`, `PATCH /locations/{id}`, `DELETE /locations/{id}`
+- `GET /locations`, `POST /locations`, `GET /locations/{id}`, `PATCH /locations/{id}`, `POST /locations/{id}/archive`
 
 **Purchase orders**
 - `GET /purchase-orders` (filter by status/vendor), `POST /purchase-orders`, `GET /purchase-orders/{id}`, `PATCH /purchase-orders/{id}`
@@ -344,20 +375,20 @@ Each phase should be reviewable/mergeable independently.
 ## 10. Risks, Questions, and Recommendations
 
 **Blocking questions** (need Erik/Patti input before or during Phase 1–2):
-- Confirm Supabase project ownership/credentials will be provisioned by Erik before Phase 1 starts.
+- Confirm Supabase project ownership/credentials will be provisioned by Erik before Phase 1 starts, including separate Patti and Erik user accounts created in Supabase Auth.
 - Confirm Render account/services will be provisioned by Erik, or whether deployment is deferred past MVP code-complete.
 
 **Non-blocking assumptions** (proceeding unless corrected):
-- Single shared login for Patti/Erik is acceptable for MVP (no per-user permission differences beyond "authenticated").
+- Patti and Erik each get an individually created Supabase Auth account (single-role access model, no shared credentials, no role distinction in UI/API for MVP).
 - "Unknown Vendor" is represented as a real seeded `vendors` row rather than a nullable FK, to avoid nullable-FK edge cases throughout receiving/reporting.
-- Bead/finding attributes are modeled as fixed nullable columns on `products` rather than a generic key-value attribute table. This is simpler and query-friendly for two categories; if more categories with very different attribute sets are added later, revisit with a generic attributes table.
+- Bead/finding attributes are modeled as fixed nullable columns on `products`, plus a nullable `attributes_json` column for future ad-hoc attributes. This is simpler and query-friendly for two categories; if more categories with very different attribute sets are added later, revisit with a generic attributes table.
 - Currency is single-currency (USD) for MVP; no multi-currency handling.
-- "Basic authenticated access" means no role distinction between Patti and Erik in the UI/API for MVP.
+- Archiving (status flags / `voided_at`) replaces hard deletes for vendors, locations, products, catalog listings, purchase orders, receipts, receipt lines, and inventory units.
 
 **Recommendations** (adjustable):
 - Generate frontend TypeScript types from the FastAPI OpenAPI schema rather than hand-maintaining a parallel type system.
 - Keep reconciliation/retroactive-order logic in a `services/` layer with direct unit tests, since it's the highest-risk business logic in the MVP.
-- Use soft status flags (`archived`, `cancelled`) instead of hard deletes for products/vendors/orders that have historical references, to preserve inventory/receiving history integrity.
+- Keep the UI terminology mapping in Section 6a as the single source of truth for labels, so internal enum values (e.g. `submitted`, `lot`) never leak into Patti-facing screens.
 
 **Deferred opportunities** (explicitly out of MVP, noted for later):
 - Image upload and media management (placeholders only for now).
@@ -371,9 +402,9 @@ Each phase should be reviewable/mergeable independently.
 
 ## Ready for implementation after approval
 
-- [ ] Erik/Patti review and approve this design document
-- [ ] Supabase project provisioned and credentials shared securely
+- [x] Erik/Patti review and approve this design document (approved, with amendments incorporated above)
+- [ ] Supabase project provisioned; separate Patti and Erik accounts created
 - [ ] Render services (or deployment target) confirmed
 - [ ] Blocking questions above resolved or explicitly deferred
-- [ ] Non-blocking assumptions confirmed or corrected
+- [x] Non-blocking assumptions confirmed or corrected (updated per approval amendments)
 - [ ] Green light to begin Phase 1 (project foundation and auth)
