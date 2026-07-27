@@ -1,0 +1,9 @@
+# Render static-site SPA fallback (Netlify-style _redirects convention).
+#
+# This is a client-side-routed React Router app. Without this rule, a direct
+# load or refresh of any non-root route (e.g. /products/abc123) returns a 404
+# from the static host, since no such file exists on disk — only index.html
+# does, and React Router takes over routing once it loads. This rewrites
+# every path to index.html (status 200, not a redirect) so the app's own
+# router can handle it.
+/*    /index.html   200

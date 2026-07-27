@@ -132,13 +132,10 @@ development.
 
 ## Deployment (Render)
 
-- Two Render services: a Python service for `backend/` (`uvicorn app.main:app`) and a static site
-  built from `frontend/` (`npm run build`, publish `frontend/dist`).
-- Set `DATABASE_URL_MIGRATIONS` and run `alembic upgrade head` as a Render pre-deploy/release
-  command against the direct (non-pooled) Supabase connection.
-- Configure all environment variables listed above in the Render dashboard — never commit real
-  secrets to the repo.
-- Set `CORS_ORIGINS` on the backend service to the deployed frontend's URL.
+Two Render services: a **Web Service** for `backend/` and a **Static Site** for `frontend/`. See
+`docs/design/render-deployment-guide.md` for exact build/start commands, every environment
+variable each service needs, Supabase-side notes, and what to expect from free-tier sizing.
+Never commit real secrets to the repo — configure them in the Render dashboard.
 
 ## Installable App (PWA)
 
