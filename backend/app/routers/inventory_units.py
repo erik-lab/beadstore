@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -8,6 +9,7 @@ from app.core.security import get_current_user
 from app.models.enums import InventoryUnitStatus, UnitType
 from app.models.inventory_adjustment import InventoryAdjustment
 from app.models.inventory_unit import InventoryUnit
+from app.models.product import Product
 from app.schemas.inventory_unit import (
     InventoryAdjustmentCreate,
     InventoryUnitCreate,
@@ -21,6 +23,7 @@ router = APIRouter(prefix="/inventory-units", tags=["inventory-units"], dependen
 @router.get("", response_model=list[InventoryUnitRead])
 def list_inventory_units(
     db: Session = Depends(get_db),
+    search: str | None = None,
     product_id: uuid.UUID | None = None,
     location_id: uuid.UUID | None = None,
     vendor_id: uuid.UUID | None = None,
@@ -30,6 +33,16 @@ def list_inventory_units(
     offset: int = 0,
 ):
     query = db.query(InventoryUnit)
+    if search:
+        pattern = f"%{search}%"
+        query = query.outerjoin(Product, InventoryUnit.product_id == Product.id).filter(
+            or_(
+                InventoryUnit.unresolved_description.ilike(pattern),
+                InventoryUnit.notes.ilike(pattern),
+                Product.name.ilike(pattern),
+                Product.sku.ilike(pattern),
+            )
+        )
     if product_id:
         query = query.filter(InventoryUnit.product_id == product_id)
     if location_id:

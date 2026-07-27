@@ -28,17 +28,14 @@ export function DashboardPage() {
       {summary.data && (
         <div className="card-grid">
           {CARDS.map((card) => (
-            <div key={card.key} className="stat-card">
-              <Link to={card.to} className="stat-card-link">
-                <div className="stat-value">{summary.data![card.key]}</div>
-                <div className="stat-label">{card.label}</div>
-              </Link>
-              <InfoHint text={hintFor(card.key)} />
-            </div>
+            <Link key={card.key} to={card.to} className="stat-card">
+              <div className="stat-value">{summary.data![card.key]}</div>
+              <div className="stat-label">
+                {card.label}
+                <InfoHint text={hintFor(card.key)} />
+              </div>
+            </Link>
           ))}
-          <Link to="/utilities" className="stat-card stat-card-utility">
-            Utilities
-          </Link>
         </div>
       )}
     </div>

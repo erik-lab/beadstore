@@ -5,6 +5,7 @@ import { useFetch } from "../../lib/useFetch";
 import type { Product, ProductCategory } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
+import { useSortableTable } from "../../lib/useSortableTable";
 
 export function ProductsListPage() {
   const [search, setSearch] = useState("");
@@ -22,6 +23,15 @@ export function ProductsListPage() {
     [search, categoryId]
   );
 
+  const { sorted, toggleSort, indicator } = useSortableTable(products.data, [
+    { key: "name", accessor: (p) => p.name },
+    { key: "category_name", accessor: (p) => p.category_name },
+    { key: "subtype_name", accessor: (p) => p.subtype_name },
+    { key: "material", accessor: (p) => p.material },
+    { key: "color", accessor: (p) => p.color },
+    { key: "status", accessor: (p) => p.status },
+  ]);
+
   return (
     <div>
       <div className="page-header">
@@ -32,7 +42,7 @@ export function ProductsListPage() {
       </div>
 
       <div className="filter-bar">
-        <input placeholder="Search by name..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input placeholder="Search products..." value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">All categories</option>
           {categories.data?.map((c) => (
@@ -46,20 +56,32 @@ export function ProductsListPage() {
       {products.loading && <Loading />}
       {products.error && <ErrorState message={products.error} />}
       {products.data && products.data.length === 0 && <EmptyState label="No products yet." />}
-      {products.data && products.data.length > 0 && (
+      {sorted && sorted.length > 0 && (
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Category</th>
-              <th>Subtype</th>
-              <th>Material</th>
-              <th>Color</th>
-              <th>Status</th>
+              <th className="sortable" onClick={() => toggleSort("name")}>
+                Name{indicator("name")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("category_name")}>
+                Category{indicator("category_name")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("subtype_name")}>
+                Subtype{indicator("subtype_name")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("material")}>
+                Material{indicator("material")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("color")}>
+                Color{indicator("color")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("status")}>
+                Status{indicator("status")}
+              </th>
             </tr>
           </thead>
           <tbody>
-            {products.data.map((p) => (
+            {sorted.map((p) => (
               <tr key={p.id}>
                 <td>
                   <Link to={`/products/${p.id}`}>{p.name}</Link>

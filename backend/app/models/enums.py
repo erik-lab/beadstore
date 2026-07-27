@@ -25,8 +25,22 @@ class ActiveArchivedStatus(str, enum.Enum):
 class CatalogListingStatus(str, enum.Enum):
     draft = "draft"
     ready = "ready"
+    published = "published"
     retired = "retired"
     archived = "archived"
+
+
+class AvailableQuantityMode(str, enum.Enum):
+    manual = "manual"
+    derived_from_inventory = "derived_from_inventory"
+    not_tracked = "not_tracked"
+
+
+class PublishReadiness(str, enum.Enum):
+    missing_photos = "missing_photos"
+    needs_pricing = "needs_pricing"
+    needs_description = "needs_description"
+    ready = "ready"
 
 
 class InventoryUnitStatus(str, enum.Enum):

@@ -4,6 +4,7 @@ const TONE_BY_STATUS: Record<string, string> = {
   matched: "tone-good",
   received: "tone-good",
   ready: "tone-good",
+  published: "tone-good",
 
   draft: "tone-neutral",
   expected: "tone-neutral",
@@ -19,6 +20,9 @@ const TONE_BY_STATUS: Record<string, string> = {
   substitution: "tone-warn",
   damaged: "tone-bad",
   unresolved: "tone-bad",
+  missing_photos: "tone-warn",
+  needs_pricing: "tone-warn",
+  needs_description: "tone-warn",
 
   cancelled: "tone-muted",
   archived: "tone-muted",

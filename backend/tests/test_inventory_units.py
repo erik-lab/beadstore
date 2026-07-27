@@ -56,6 +56,42 @@ def test_inventory_unit_supports_unresolved_description(client, auth_headers):
     assert resp.json()["unresolved_description"] == "Mystery bag of beads"
 
 
+def test_inventory_unit_search_matches_product_name_or_unresolved_description(client, auth_headers):
+    product = _create_product(client, auth_headers)
+    client.post(
+        "/api/v1/inventory-units",
+        json={
+            "product_id": product["id"],
+            "quantity": 4,
+            "unit_type": "strand",
+            "received_date": str(datetime.date.today()),
+        },
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/inventory-units",
+        json={
+            "unresolved_description": "Mystery bag of beads",
+            "quantity": 1,
+            "unit_type": "bag",
+            "status": "unresolved",
+            "received_date": str(datetime.date.today()),
+        },
+        headers=auth_headers,
+    )
+
+    resp = client.get("/api/v1/inventory-units?search=Test bead", headers=auth_headers)
+    assert resp.status_code == 200
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["product_name"] == "Test bead"
+
+    resp = client.get("/api/v1/inventory-units?search=Mystery", headers=auth_headers)
+    results = resp.json()
+    assert len(results) == 1
+    assert results[0]["unresolved_description"] == "Mystery bag of beads"
+
+
 def test_inventory_adjustment_changes_quantity(client, auth_headers):
     product = _create_product(client, auth_headers)
     unit = client.post(

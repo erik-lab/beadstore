@@ -6,8 +6,10 @@ import type { InventoryUnit, Location } from "../../lib/types";
 import { describeItem } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
+import { useSortableTable } from "../../lib/useSortableTable";
 
 export function InventoryUnitsListPage() {
+  const [search, setSearch] = useState("");
   const [locationId, setLocationId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -16,12 +18,23 @@ export function InventoryUnitsListPage() {
     () =>
       api.get<InventoryUnit[]>(
         `/inventory-units?${new URLSearchParams({
+          ...(search ? { search } : {}),
           ...(locationId ? { location_id: locationId } : {}),
           ...(statusFilter ? { status: statusFilter } : {}),
         }).toString()}`
       ),
-    [locationId, statusFilter]
+    [search, locationId, statusFilter]
   );
+
+  const { sorted, toggleSort, indicator } = useSortableTable(units.data, [
+    { key: "item", accessor: (u) => describeItem(u) },
+    { key: "quantity", accessor: (u) => u.quantity },
+    { key: "unit_type", accessor: (u) => u.unit_type },
+    { key: "vendor_name", accessor: (u) => u.vendor_name },
+    { key: "location_name", accessor: (u) => u.location_name },
+    { key: "status", accessor: (u) => u.status },
+    { key: "received_date", accessor: (u) => u.received_date },
+  ]);
 
   return (
     <div>
@@ -33,6 +46,7 @@ export function InventoryUnitsListPage() {
       </div>
 
       <div className="filter-bar">
+        <input placeholder="Search inventory..." value={search} onChange={(e) => setSearch(e.target.value)} />
         <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
           <option value="">All locations</option>
           {locations.data?.map((loc) => (
@@ -55,21 +69,35 @@ export function InventoryUnitsListPage() {
       {units.loading && <Loading />}
       {units.error && <ErrorState message={units.error} />}
       {units.data && units.data.length === 0 && <EmptyState label="No inventory units found." />}
-      {units.data && units.data.length > 0 && (
+      {sorted && sorted.length > 0 && (
         <table className="data-table">
           <thead>
             <tr>
-              <th>Item</th>
-              <th>Quantity</th>
-              <th>Unit</th>
-              <th>Vendor</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Received</th>
+              <th className="sortable" onClick={() => toggleSort("item")}>
+                Item{indicator("item")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("quantity")}>
+                Quantity{indicator("quantity")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("unit_type")}>
+                Unit{indicator("unit_type")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("vendor_name")}>
+                Vendor{indicator("vendor_name")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("location_name")}>
+                Location{indicator("location_name")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("status")}>
+                Status{indicator("status")}
+              </th>
+              <th className="sortable" onClick={() => toggleSort("received_date")}>
+                Received{indicator("received_date")}
+              </th>
             </tr>
           </thead>
           <tbody>
-            {units.data.map((u) => (
+            {sorted.map((u) => (
               <tr key={u.id}>
                 <td>
                   <Link to={`/inventory/${u.id}`}>{describeItem(u)}</Link>

@@ -1,7 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import Column
+from sqlalchemy import Column, or_
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -65,7 +65,14 @@ def list_products(
 ):
     query = db.query(Product)
     if search:
-        query = query.filter(Product.name.ilike(f"%{search}%"))
+        pattern = f"%{search}%"
+        searchable_columns = [
+            Product.name,
+            Product.sku,
+            Product.description,
+            *ATTRIBUTE_FIELDS.values(),
+        ]
+        query = query.filter(or_(*(column.ilike(pattern) for column in searchable_columns)))
     if category_id:
         query = query.filter(Product.category_id == category_id)
     if subtype_id:

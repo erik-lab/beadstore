@@ -17,7 +17,14 @@ export function InfoHint({ text }: { text: string | undefined }) {
         className="info-hint-icon"
         title={text}
         aria-label="More information"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={(e) => {
+          // This icon is sometimes placed inside a clickable card/row (e.g.
+          // the dashboard) — stop the click from also triggering that
+          // parent's navigation.
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
       >
         i
       </button>

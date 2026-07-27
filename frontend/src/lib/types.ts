@@ -18,7 +18,9 @@ export type InventoryUnitStatus = "available" | "reserved" | "depleted" | "damag
 export type PurchaseOrderStatus = "draft" | "submitted" | "partially_received" | "received" | "closed" | "cancelled";
 export type PurchaseOrderLineStatus = "expected" | "partially_received" | "received" | "discrepancy" | "cancelled";
 export type ReceivingStatus = "matched" | "overage" | "shortage" | "substitution" | "damaged" | "unresolved";
-export type CatalogListingStatus = "draft" | "ready" | "retired" | "archived";
+export type CatalogListingStatus = "draft" | "ready" | "published" | "retired" | "archived";
+export type AvailableQuantityMode = "manual" | "derived_from_inventory" | "not_tracked";
+export type PublishReadiness = "missing_photos" | "needs_pricing" | "needs_description" | "ready";
 
 export interface ProductCategory {
   id: string;
@@ -69,9 +71,33 @@ export interface CatalogListing {
   id: string;
   product_id: string;
   title: string;
+  short_description: string | null;
   listing_description: string | null;
   price: number | null;
   status: CatalogListingStatus;
+
+  sales_unit: UnitType | null;
+  quantity_per_listing: number | null;
+  available_quantity_mode: AvailableQuantityMode;
+  manual_available_quantity: number | null;
+
+  category_override_id: string | null;
+  category_override_name?: string | null;
+  subtype_override: string | null;
+  tags: string | null;
+  collection_theme: string | null;
+
+  featured: boolean;
+  sort_order: number;
+
+  seo_title: string | null;
+  seo_description: string | null;
+  listing_notes: string | null;
+  publish_readiness: PublishReadiness | null;
+
+  product_name?: string | null;
+  product_description?: string | null;
+  product_sku?: string | null;
 }
 
 export interface Location {

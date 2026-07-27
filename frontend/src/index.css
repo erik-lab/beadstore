@@ -233,6 +233,16 @@ textarea {
   color: var(--text-h);
 }
 
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.data-table th.sortable:hover {
+  color: var(--accent);
+}
+
 .data-table tr:last-child td {
   border-bottom: none;
 }
@@ -339,38 +349,17 @@ legend {
   display: block;
 }
 
-.stat-card-link {
-  text-decoration: none;
-  color: inherit;
-  display: block;
-  padding-right: 16px;
-}
-
-.stat-card .info-hint {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  margin-left: 0;
-}
-
 .stat-value {
   font-size: 28px;
   font-weight: 700;
 }
 
 .stat-label {
+  display: flex;
+  align-items: center;
   font-size: 13px;
   color: var(--text);
   margin-top: 4px;
-}
-
-.stat-card-utility {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  color: var(--accent);
-  border-style: dashed;
 }
 
 .info-hint {

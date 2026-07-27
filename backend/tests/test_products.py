@@ -212,3 +212,26 @@ def test_attribute_options_returns_distinct_used_values(client, auth_headers):
 def test_attribute_options_rejects_unknown_field(client, auth_headers):
     resp = client.get("/api/v1/products/attribute-options?field=not_a_real_field", headers=auth_headers)
     assert resp.status_code == 400
+
+
+def test_search_matches_attributes_not_just_name(client, auth_headers):
+    category = _create_category(client, auth_headers)
+    client.post(
+        "/api/v1/products",
+        json={"name": "Round Bead", "category_id": category["id"], "material": "Turquoise"},
+        headers=auth_headers,
+    )
+    client.post(
+        "/api/v1/products",
+        json={"name": "Square Bead", "category_id": category["id"], "color": "Green"},
+        headers=auth_headers,
+    )
+
+    resp = client.get("/api/v1/products?search=Turquoise", headers=auth_headers)
+    assert resp.status_code == 200
+    names = [p["name"] for p in resp.json()]
+    assert names == ["Round Bead"]
+
+    resp = client.get("/api/v1/products?search=Green", headers=auth_headers)
+    names = [p["name"] for p in resp.json()]
+    assert names == ["Square Bead"]
