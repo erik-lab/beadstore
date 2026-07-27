@@ -140,6 +140,17 @@ development.
   secrets to the repo.
 - Set `CORS_ORIGINS` on the backend service to the deployed frontend's URL.
 
+## Installable App (PWA)
+
+The frontend ships a minimal web app manifest (`frontend/public/manifest.webmanifest`) and a
+static-shell-only service worker (`frontend/public/sw.js`), so once deployed on Render over HTTPS
+it can be installed from the browser on a laptop/desktop or added to a phone's home screen. The
+service worker only caches the app's own HTML/JS/CSS/icons — it never caches API responses, so no
+inventory/product/vendor/order/receipt data is ever stored on the device. There is no offline
+support for actual business workflows; installing only changes how the app opens (its own window/
+icon instead of a browser tab). See `docs/design/pwa-install-instructions.md` for install/
+uninstall steps to share with Patti and Erik.
+
 ## Manual Acceptance Checklist
 
 Run through this after `docker`-free local setup (or against a deployed environment) with a real
