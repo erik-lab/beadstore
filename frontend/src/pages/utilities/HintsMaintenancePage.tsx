@@ -3,6 +3,7 @@ import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { Hint } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
+import { HINT_LOCATIONS, findHintLocation } from "../../lib/hintLocations";
 
 export function HintsMaintenancePage() {
   const hints = useFetch(() => api.get<Hint[]>("/hints"), []);
@@ -11,8 +12,7 @@ export function HintsMaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const [newPage, setNewPage] = useState("");
-  const [newItemKey, setNewItemKey] = useState("");
+  const [newLocationKey, setNewLocationKey] = useState("");
   const [newText, setNewText] = useState("");
 
   function startEdit(hint: Hint) {
@@ -47,14 +47,14 @@ export function HintsMaintenancePage() {
 
   async function addHint() {
     setError(null);
-    if (!newPage.trim() || !newItemKey.trim() || !newText.trim()) {
-      setError("Page, item key, and text are all required for a new hint.");
+    if (!newLocationKey || !newText.trim()) {
+      setError("Choose a location and enter text for the new hint.");
       return;
     }
+    const [page, itemKey] = newLocationKey.split("::");
     try {
-      await api.post("/hints", { page: newPage.trim(), item_key: newItemKey.trim(), text: newText.trim() });
-      setNewPage("");
-      setNewItemKey("");
+      await api.post("/hints", { page, item_key: itemKey, text: newText.trim() });
+      setNewLocationKey("");
       setNewText("");
       hints.reload();
     } catch (err) {
@@ -66,8 +66,9 @@ export function HintsMaintenancePage() {
     <div>
       <h1>Hints Maintenance</h1>
       <p className="page-subtitle">
-        Edit the text shown by the (i) icons throughout the app. Each hint is tied to a page and
-        an item on that page.
+        Edit the text shown by the (i) icons throughout the app. Each hint is tied to one specific
+        spot in the app, listed below by name — a hint saved for a spot that isn't in this list
+        won't show up anywhere.
       </p>
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -78,47 +79,59 @@ export function HintsMaintenancePage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Page</th>
-              <th>Item</th>
+              <th>Location</th>
               <th>Text</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {hints.data.map((hint) => (
-              <tr key={hint.id}>
-                <td>{hint.page}</td>
-                <td>{hint.item_key}</td>
-                <td style={{ minWidth: 320 }}>
-                  {editingId === hint.id ? (
-                    <textarea value={draftText} onChange={(e) => setDraftText(e.target.value)} />
-                  ) : (
-                    hint.text
-                  )}
-                </td>
-                <td>
-                  {editingId === hint.id ? (
-                    <div className="maintenance-row">
-                      <button className="btn-primary" onClick={() => saveEdit(hint.id)} disabled={saving}>
-                        Save
-                      </button>
-                      <button className="btn-secondary" onClick={() => setEditingId(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="maintenance-row">
-                      <button className="btn-secondary" onClick={() => startEdit(hint)}>
-                        Edit
-                      </button>
-                      <button className="btn-secondary" onClick={() => deleteHint(hint.id)}>
-                        Delete
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {hints.data.map((hint) => {
+              const location = findHintLocation(hint.page, hint.item_key);
+              return (
+                <tr key={hint.id}>
+                  <td>
+                    {location ? (
+                      location.label
+                    ) : (
+                      <>
+                        <span className="badge tone-warn">Not shown anywhere</span>
+                        <div style={{ fontSize: 12, marginTop: 4 }}>
+                          page: {hint.page}, item: {hint.item_key}
+                        </div>
+                      </>
+                    )}
+                  </td>
+                  <td style={{ minWidth: 320 }}>
+                    {editingId === hint.id ? (
+                      <textarea value={draftText} onChange={(e) => setDraftText(e.target.value)} />
+                    ) : (
+                      hint.text
+                    )}
+                  </td>
+                  <td>
+                    {editingId === hint.id ? (
+                      <div className="maintenance-row">
+                        <button className="btn-primary" onClick={() => saveEdit(hint.id)} disabled={saving}>
+                          Save
+                        </button>
+                        <button className="btn-secondary" onClick={() => setEditingId(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="maintenance-row">
+                        <button className="btn-secondary" onClick={() => startEdit(hint)}>
+                          Edit
+                        </button>
+                        <button className="btn-secondary" onClick={() => deleteHint(hint.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -127,16 +140,15 @@ export function HintsMaintenancePage() {
         <h2>Add a New Hint</h2>
         <div className="form-card">
           <label>
-            Page
-            <input value={newPage} onChange={(e) => setNewPage(e.target.value)} placeholder="e.g. dashboard" />
-          </label>
-          <label>
-            Item key
-            <input
-              value={newItemKey}
-              onChange={(e) => setNewItemKey(e.target.value)}
-              placeholder="e.g. active_products"
-            />
+            Location
+            <select value={newLocationKey} onChange={(e) => setNewLocationKey(e.target.value)}>
+              <option value="">Select a spot in the app...</option>
+              {HINT_LOCATIONS.map((loc) => (
+                <option key={`${loc.page}::${loc.itemKey}`} value={`${loc.page}::${loc.itemKey}`}>
+                  {loc.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Text
