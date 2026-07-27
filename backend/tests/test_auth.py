@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
+import jwt
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +35,45 @@ def test_expired_token_is_rejected(client):
 def test_invalid_token_is_rejected(client):
     resp = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer not-a-real-token"})
     assert resp.status_code == 401
+
+
+def test_asymmetric_jwt_verified_via_jwks(client, monkeypatch):
+    """Supabase projects migrated to 'JWT Signing Keys' issue ES256-signed tokens
+    verified via the project's JWKS endpoint, instead of the legacy HS256 shared
+    secret. The backend must support both, dispatching on the token's own 'alg'
+    header."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from app.core import security
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+
+    user_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": user_id,
+            "email": "erik@example.com",
+            "aud": "authenticated",
+            "exp": now + timedelta(hours=1),
+        },
+        private_key,
+        algorithm="ES256",
+    )
+
+    class FakeSigningKey:
+        key = public_key
+
+    class FakeJWKClient:
+        def get_signing_key_from_jwt(self, token):
+            return FakeSigningKey()
+
+    monkeypatch.setattr(security, "_get_jwks_client", lambda: FakeJWKClient())
+
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    assert resp.json()["email"] == "erik@example.com"
 
 
 def test_concurrent_first_login_does_not_500(client, monkeypatch):
