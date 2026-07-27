@@ -32,6 +32,18 @@ DASHBOARD_HINTS = {
     "total_receipts": "The total number of receiving events recorded, including partial receipts and quick receives.",
 }
 
+SIDEBAR_HINTS = {
+    "dashboard": "An overview of what needs attention — stock levels, open orders, and items that need a closer look.",
+    "products": "Your catalog of distinct items — the master list of what you carry, separate from quantity or how it's listed for sale.",
+    "catalog-listings": "How products are presented for sale — title, description, price, and other listing-specific details.",
+    "inventory": "The physical stock you actually have on hand — quantities, locations, and where it came from.",
+    "vendors": "The suppliers you order beads and supplies from.",
+    "purchase-orders": "Orders placed with vendors — track what's been ordered, and whether it's arrived yet.",
+    "quick-receive": "Log stock that arrived without a prior order on file.",
+    "locations": "Where inventory is physically stored (shelves, bins, rooms, etc.).",
+    "utilities": "Maintenance tools — manage categories, subtypes, and the help text shown throughout the app.",
+}
+
 
 def run():
     db = SessionLocal()
@@ -113,6 +125,10 @@ def run():
             existing = db.query(Hint).filter(Hint.page == "dashboard", Hint.item_key == item_key).first()
             if existing is None:
                 db.add(Hint(page="dashboard", item_key=item_key, text=text))
+        for item_key, text in SIDEBAR_HINTS.items():
+            existing = db.query(Hint).filter(Hint.page == "sidebar", Hint.item_key == item_key).first()
+            if existing is None:
+                db.add(Hint(page="sidebar", item_key=item_key, text=text))
         db.commit()
 
         print("Seed complete.")
