@@ -1,0 +1,20 @@
+# Render static-site header rules (Netlify-style _headers convention).
+#
+# The service worker's own update check and our network-first navigation
+# strategy both depend on the browser actually being able to fetch a fresh
+# copy of these entry-point files instead of Render's CDN or the browser's
+# ordinary HTTP cache silently serving an old one. Hashed build assets are the
+# opposite case — their filename changes whenever their content does, so they
+# are safe (and good for performance) to cache for a long time.
+
+/sw.js
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

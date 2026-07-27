@@ -6,7 +6,12 @@
 // inventory/supplier/product/receipt data. Offline business workflows are out
 // of scope for this pass; a stale-but-installable shell is all this provides.
 
-const CACHE_NAME = "patti-back-office-shell-v1";
+// CACHE_VERSION is stamped in at build time (see scripts/stamp-sw-version.mjs,
+// wired into `npm run build`) so every deploy gets a distinct cache name
+// automatically — no one has to remember to bump a version number by hand.
+// In dev (where the placeholder is never replaced) it falls back to "dev".
+const CACHE_VERSION = "__CACHE_VERSION__".startsWith("__") ? "dev" : "__CACHE_VERSION__";
+const CACHE_NAME = `patti-back-office-shell-${CACHE_VERSION}`;
 
 const STATIC_EXTENSIONS = [".js", ".css", ".svg", ".png", ".ico", ".webmanifest", ".woff", ".woff2"];
 

@@ -151,6 +151,19 @@ support for actual business workflows; installing only changes how the app opens
 icon instead of a browser tab). See `docs/design/pwa-install-instructions.md` for install/
 uninstall steps to share with Patti and Erik.
 
+**Cache versioning:** `npm run build` automatically stamps a fresh, unique cache-version string
+into the built `dist/sw.js` (`scripts/stamp-sw-version.mjs`) — the source `public/sw.js` keeps a
+placeholder and is never hand-edited per release. The service worker's `activate` handler deletes
+any cache that doesn't match the current build's version, so every deploy automatically cleans up
+the previous one; nobody has to remember to bump a version number by hand. `public/_headers` also
+tells Render to serve `/sw.js`, `/index.html`, and `/manifest.webmanifest` with
+`Cache-Control: no-cache`, so the browser/CDN can't serve a stale copy of those specific files at
+the HTTP layer regardless of the service worker logic — hashed asset files under `/assets/` are
+long-cached instead, since their filename changes whenever their content does. This was verified
+by simulating two consecutive builds served from the same URL (mimicking a Render redeploy): the
+first build's cache populated as expected, and after swapping in the second build and forcing an
+update check, the old cache was fully deleted and only the new build's cache remained.
+
 ## Manual Acceptance Checklist
 
 Run through this after `docker`-free local setup (or against a deployed environment) with a real
