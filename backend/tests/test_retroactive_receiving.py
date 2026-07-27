@@ -72,3 +72,11 @@ def test_resolve_unresolved_receipt_line(client, auth_headers):
     resolved_line = resp.json()["lines"][0]
     assert resolved_line["product_id"] == product["id"]
     assert resolved_line["receiving_status"] == "matched"
+    # Once resolved, the line and its inventory unit should display the product's
+    # name instead of the free-text description Patti typed in during receiving.
+    assert resolved_line["product_name"] == "Silver clasp"
+    assert resolved_line["unresolved_item_description"] is None
+
+    inventory_unit_id = resolved_line["inventory_unit_id"]
+    unit_resp = client.get(f"/api/v1/inventory-units/{inventory_unit_id}", headers=auth_headers)
+    assert unit_resp.json()["product_name"] == "Silver clasp"

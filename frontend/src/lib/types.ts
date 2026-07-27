@@ -82,6 +82,8 @@ export interface Location {
 export interface InventoryUnit {
   id: string;
   product_id: string | null;
+  product_name?: string | null;
+  product_sku?: string | null;
   unresolved_description: string | null;
   quantity: number;
   unit_type: UnitType;
@@ -90,9 +92,12 @@ export interface InventoryUnit {
   cost_amount: number | null;
   cost_currency: string | null;
   vendor_id: string | null;
+  vendor_name?: string | null;
   purchase_order_id: string | null;
   receipt_line_id: string | null;
+  receipt_received_date?: string | null;
   location_id: string | null;
+  location_name?: string | null;
   notes: string | null;
 }
 
@@ -100,16 +105,21 @@ export interface PurchaseOrderLine {
   id: string;
   purchase_order_id: string;
   product_id: string | null;
+  product_name?: string | null;
+  product_sku?: string | null;
   expected_item_description: string | null;
   expected_quantity: number | null;
   expected_unit_type: UnitType | null;
   unit_cost: number | null;
   status: PurchaseOrderLineStatus;
+  order_date?: string | null;
+  vendor_name?: string | null;
 }
 
 export interface PurchaseOrder {
   id: string;
   vendor_id: string;
+  vendor_name?: string | null;
   status: PurchaseOrderStatus;
   order_date: string;
   expected_date: string | null;
@@ -123,6 +133,8 @@ export interface ReceiptLine {
   receipt_id: string;
   purchase_order_line_id: string | null;
   product_id: string | null;
+  product_name?: string | null;
+  product_sku?: string | null;
   unresolved_item_description: string | null;
   received_quantity: number;
   received_unit_type: UnitType;
@@ -130,6 +142,10 @@ export interface ReceiptLine {
   discrepancy_notes: string | null;
   inventory_unit_id: string | null;
   location_id: string | null;
+  location_name?: string | null;
+  purchase_order_id?: string | null;
+  received_date?: string | null;
+  vendor_name?: string | null;
 }
 
 export interface Receipt {
@@ -179,3 +195,22 @@ export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   closed: "Closed",
   cancelled: "Cancelled",
 };
+
+/**
+ * Human-readable label for anything that's either linked to a product or still a
+ * free-text description ("unresolved") — used everywhere a list/detail view would
+ * otherwise show a bare ID or the generic word "product".
+ */
+export function describeItem(item: {
+  product_name?: string | null;
+  product_sku?: string | null;
+  unresolved_description?: string | null;
+  expected_item_description?: string | null;
+  unresolved_item_description?: string | null;
+}): string {
+  if (item.product_name) {
+    return item.product_sku ? `${item.product_name} (SKU: ${item.product_sku})` : item.product_name;
+  }
+  const freeText = item.unresolved_description ?? item.expected_item_description ?? item.unresolved_item_description;
+  return freeText ? `Unresolved: ${freeText}` : "Unresolved item";
+}

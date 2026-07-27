@@ -2,19 +2,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
-import type { PurchaseOrder, Vendor } from "../../lib/types";
+import type { PurchaseOrder } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
 
 export function PurchaseOrdersListPage() {
   const [openOnly, setOpenOnly] = useState(false);
-  const vendors = useFetch(() => api.get<Vendor[]>("/vendors?limit=200"), []);
   const orders = useFetch(
     () => api.get<PurchaseOrder[]>(`/purchase-orders${openOnly ? "?open_only=true" : ""}`),
     [openOnly]
   );
-
-  const vendorName = (id: string) => vendors.data?.find((v) => v.id === id)?.name ?? "—";
 
   return (
     <div>
@@ -56,7 +53,7 @@ export function PurchaseOrdersListPage() {
                 <td>
                   <Link to={`/purchase-orders/${po.id}`}>{po.order_date}</Link>
                 </td>
-                <td>{vendorName(po.vendor_id)}</td>
+                <td>{po.vendor_name ?? "—"}</td>
                 <td>
                   <StatusBadge status={po.status} />
                 </td>

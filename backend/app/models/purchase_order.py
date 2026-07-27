@@ -7,6 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 from app.models.enums import PurchaseOrderLineStatus, PurchaseOrderStatus, UnitType
 from app.models.mixins import AuditMixin, TimestampMixin, UUIDPKMixin
+from app.models.product import Product
+from app.models.vendor import Vendor
 
 
 class PurchaseOrder(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -26,6 +28,11 @@ class PurchaseOrder(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     lines: Mapped[list["PurchaseOrderLine"]] = relationship(
         back_populates="purchase_order", cascade="all, delete-orphan"
     )
+    vendor: Mapped[Vendor] = relationship(viewonly=True, lazy="joined")
+
+    @property
+    def vendor_name(self) -> str | None:
+        return self.vendor.name if self.vendor else None
 
 
 class PurchaseOrderLine(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -46,3 +53,20 @@ class PurchaseOrderLine(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     )
 
     purchase_order: Mapped[PurchaseOrder] = relationship(back_populates="lines")
+    product: Mapped[Product | None] = relationship(viewonly=True, lazy="joined")
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
+
+    @property
+    def product_sku(self) -> str | None:
+        return self.product.sku if self.product else None
+
+    @property
+    def order_date(self) -> date:
+        return self.purchase_order.order_date
+
+    @property
+    def vendor_name(self) -> str | None:
+        return self.purchase_order.vendor_name

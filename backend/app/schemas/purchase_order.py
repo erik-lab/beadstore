@@ -34,11 +34,15 @@ class PurchaseOrderLineRead(ORMModel):
     id: uuid.UUID
     purchase_order_id: uuid.UUID
     product_id: uuid.UUID | None
+    product_name: str | None = None
+    product_sku: str | None = None
     expected_item_description: str | None
     expected_quantity: float | None
     expected_unit_type: UnitType | None
     unit_cost: float | None
     status: PurchaseOrderLineStatus
+    order_date: date | None = None
+    vendor_name: str | None = None
 
 
 class PurchaseOrderCreate(BaseModel):
@@ -60,6 +64,7 @@ class PurchaseOrderUpdate(BaseModel):
 class PurchaseOrderRead(ORMModel):
     id: uuid.UUID
     vendor_id: uuid.UUID
+    vendor_name: str | None = None
     status: PurchaseOrderStatus
     order_date: date
     expected_date: date | None

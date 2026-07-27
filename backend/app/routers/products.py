@@ -9,9 +9,13 @@ from app.models.catalog_listing import CatalogListing
 from app.models.enums import ActiveArchivedStatus
 from app.models.inventory_unit import InventoryUnit
 from app.models.product import Product
+from app.models.purchase_order import PurchaseOrderLine
+from app.models.receipt import ReceiptLine
 from app.schemas.catalog_listing import CatalogListingRead
 from app.schemas.inventory_unit import InventoryUnitRead
 from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
+from app.schemas.purchase_order import PurchaseOrderLineRead
+from app.schemas.receiving import ReceiptLineRead
 
 router = APIRouter(prefix="/products", tags=["products"], dependencies=[Depends(get_current_user)])
 
@@ -86,3 +90,25 @@ def get_product_inventory_units(product_id: uuid.UUID, db: Session = Depends(get
 @router.get("/{product_id}/catalog-listings", response_model=list[CatalogListingRead])
 def get_product_catalog_listings(product_id: uuid.UUID, db: Session = Depends(get_db)):
     return db.query(CatalogListing).filter(CatalogListing.product_id == product_id).all()
+
+
+@router.get("/{product_id}/purchase-order-lines", response_model=list[PurchaseOrderLineRead])
+def get_product_purchase_order_lines(product_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Supplier order lines that requested this product — 'which order(s) is this coming from'."""
+    return (
+        db.query(PurchaseOrderLine)
+        .filter(PurchaseOrderLine.product_id == product_id)
+        .order_by(PurchaseOrderLine.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/{product_id}/receipt-lines", response_model=list[ReceiptLineRead])
+def get_product_receipt_lines(product_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Receiving history for this product — 'how did this stock get here'."""
+    return (
+        db.query(ReceiptLine)
+        .filter(ReceiptLine.product_id == product_id)
+        .order_by(ReceiptLine.created_at.desc())
+        .all()
+    )

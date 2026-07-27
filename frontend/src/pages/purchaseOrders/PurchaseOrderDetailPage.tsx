@@ -2,15 +2,14 @@ import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
-import type { Product, PurchaseOrder, Receipt, Vendor } from "../../lib/types";
-import { UNIT_TYPES } from "../../lib/types";
+import type { Product, PurchaseOrder, Receipt } from "../../lib/types";
+import { UNIT_TYPES, describeItem } from "../../lib/types";
 import { Loading, ErrorState, EmptyState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
 
 export function PurchaseOrderDetailPage() {
   const { id } = useParams();
   const po = useFetch(() => api.get<PurchaseOrder>(`/purchase-orders/${id}`), [id]);
-  const vendors = useFetch(() => api.get<Vendor[]>("/vendors?limit=200"), []);
   const products = useFetch(() => api.get<Product[]>("/products?limit=200"), []);
   const receipts = useFetch(() => api.get<Receipt[]>(`/purchase-orders/${id}/receipts`), [id]);
 
@@ -26,7 +25,6 @@ export function PurchaseOrderDetailPage() {
   if (po.error) return <ErrorState message={po.error} />;
   if (!po.data) return null;
   const order = po.data;
-  const vendorName = vendors.data?.find((v) => v.id === order.vendor_id)?.name ?? "—";
   const canEditLines = order.status === "draft" || order.status === "submitted";
   const canReceive = !["cancelled", "closed"].includes(order.status);
 
@@ -103,7 +101,7 @@ export function PurchaseOrderDetailPage() {
       <dl className="detail-grid">
         <dt>Vendor</dt>
         <dd>
-          <Link to={`/vendors/${order.vendor_id}`}>{vendorName}</Link>
+          <Link to={`/vendors/${order.vendor_id}`}>{order.vendor_name ?? "View vendor"}</Link>
         </dd>
         <dt>Notes</dt>
         <dd>{order.notes ?? "—"}</dd>
@@ -127,9 +125,9 @@ export function PurchaseOrderDetailPage() {
                 <tr key={line.id}>
                   <td>
                     {line.product_id ? (
-                      <Link to={`/products/${line.product_id}`}>View product</Link>
+                      <Link to={`/products/${line.product_id}`}>{describeItem(line)}</Link>
                     ) : (
-                      line.expected_item_description ?? "—"
+                      describeItem(line)
                     )}
                   </td>
                   <td>{line.expected_quantity ?? "—"}</td>
@@ -192,25 +190,45 @@ export function PurchaseOrderDetailPage() {
 
       <section className="detail-section">
         <h2>Receipts</h2>
+        <p className="page-subtitle">
+          Every time items were received against this order, including partial receipts.
+        </p>
         {receipts.data && receipts.data.length === 0 && <EmptyState label="No receipts recorded yet." />}
-        {receipts.data && receipts.data.length > 0 && (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Received Date</th>
-                <th>Lines</th>
-              </tr>
-            </thead>
-            <tbody>
-              {receipts.data.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.received_date}</td>
-                  <td>{r.lines.length}</td>
+        {receipts.data?.map((r) => (
+          <div key={r.id} className="detail-section">
+            <h2 style={{ fontSize: 15 }}>Receipt — {r.received_date}</h2>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Received Qty</th>
+                  <th>Reconciliation</th>
+                  <th>Notes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>
+                {r.lines.map((line) => (
+                  <tr key={line.id}>
+                    <td>
+                      {line.product_id ? (
+                        <Link to={`/products/${line.product_id}`}>{describeItem(line)}</Link>
+                      ) : (
+                        describeItem(line)
+                      )}
+                    </td>
+                    <td>
+                      {line.received_quantity} {line.received_unit_type}
+                    </td>
+                    <td>
+                      <StatusBadge status={line.receiving_status} />
+                    </td>
+                    <td>{line.discrepancy_notes ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
       </section>
     </div>
   );

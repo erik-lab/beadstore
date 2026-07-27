@@ -6,7 +6,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.enums import ReceivingStatus, UnitType
+from app.models.location import Location
 from app.models.mixins import AuditMixin, TimestampMixin, UUIDPKMixin
+from app.models.product import Product
+from app.models.purchase_order import PurchaseOrder
 
 
 class Receipt(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -19,6 +22,7 @@ class Receipt(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     lines: Mapped[list["ReceiptLine"]] = relationship(back_populates="receipt", cascade="all, delete-orphan")
+    purchase_order: Mapped[PurchaseOrder] = relationship(viewonly=True, lazy="joined")
 
 
 class ReceiptLine(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -44,3 +48,29 @@ class ReceiptLine(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
+    product: Mapped[Product | None] = relationship(viewonly=True, lazy="joined")
+    location: Mapped[Location | None] = relationship(viewonly=True, lazy="joined")
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
+
+    @property
+    def product_sku(self) -> str | None:
+        return self.product.sku if self.product else None
+
+    @property
+    def location_name(self) -> str | None:
+        return self.location.name if self.location else None
+
+    @property
+    def purchase_order_id(self) -> uuid.UUID:
+        return self.receipt.purchase_order_id
+
+    @property
+    def received_date(self) -> date:
+        return self.receipt.received_date
+
+    @property
+    def vendor_name(self) -> str | None:
+        return self.receipt.purchase_order.vendor_name

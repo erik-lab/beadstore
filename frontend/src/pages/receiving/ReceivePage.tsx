@@ -3,8 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { Product, PurchaseOrder, ReceiveResult } from "../../lib/types";
-import { UNIT_TYPES } from "../../lib/types";
+import { UNIT_TYPES, describeItem } from "../../lib/types";
 import { Loading, ErrorState } from "../../components/States";
+import { StatusBadge } from "../../components/StatusBadge";
 
 interface LineDraft {
   purchaseOrderLineId: string | null;
@@ -115,20 +116,48 @@ export function ReceivePage() {
   }
 
   if (result) {
+    const isOpen = ["draft", "submitted", "partially_received"].includes(result.purchase_order_status);
     return (
       <div>
         <h1>Receipt Recorded</h1>
         <div className="alert alert-success">
-          Purchase order status is now <strong>{result.purchase_order_status}</strong>.
+          This supplier order is now{" "}
+          <strong>
+            {result.purchase_order_status === "partially_received"
+              ? "Partially Received — still open"
+              : result.purchase_order_status === "received"
+                ? "fully Received"
+                : result.purchase_order_status}
+          </strong>
+          {isOpen && result.purchase_order_status === "partially_received"
+            ? ". More items are still expected on this order."
+            : "."}
         </div>
-        <h2>Reconciliation Summary</h2>
-        <ul className="summary-list">
-          {Object.entries(result.summary).map(([status, count]) => (
-            <li key={status}>
-              {status}: {count}
-            </li>
-          ))}
-        </ul>
+        <h2>What Was Recorded</h2>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Received Qty</th>
+              <th>Reconciliation</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.receipt.lines.map((line) => (
+              <tr key={line.id}>
+                <td>{describeItem(line)}</td>
+                <td>
+                  {line.received_quantity} {line.received_unit_type}
+                </td>
+                <td>
+                  <StatusBadge status={line.receiving_status} />
+                </td>
+                <td>{line.discrepancy_notes ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         <Link className="btn-primary" to={`/purchase-orders/${id}`}>
           Back to order
         </Link>

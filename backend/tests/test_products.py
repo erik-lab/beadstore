@@ -53,3 +53,82 @@ def test_list_products_filter_by_category(client, auth_headers):
     assert resp.status_code == 200
     names = [p["name"] for p in resp.json()]
     assert names == ["Bead A"]
+
+
+def test_inventory_unit_list_resolves_product_name(client, auth_headers):
+    """List/detail views should show the product's name, not just its ID, so a user
+    never has to guess what 'Linked product' refers to."""
+    import datetime
+
+    category = _create_category(client, auth_headers)
+    product = client.post(
+        "/api/v1/products",
+        json={"name": "6mm Round Garnet", "category_id": category["id"], "sku": "GAR-6MM"},
+        headers=auth_headers,
+    ).json()
+
+    client.post(
+        "/api/v1/inventory-units",
+        json={
+            "product_id": product["id"],
+            "quantity": 3,
+            "unit_type": "strand",
+            "received_date": str(datetime.date.today()),
+        },
+        headers=auth_headers,
+    )
+
+    resp = client.get(f"/api/v1/inventory-units?product_id={product['id']}", headers=auth_headers)
+    assert resp.status_code == 200
+    unit = resp.json()[0]
+    assert unit["product_name"] == "6mm Round Garnet"
+    assert unit["product_sku"] == "GAR-6MM"
+
+
+def test_product_detail_shows_purchase_order_and_receipt_history(client, auth_headers):
+    """Product detail page needs to answer 'which order/receipt did this come from' —
+    covers the new /purchase-order-lines and /receipt-lines product sub-resources."""
+    category = _create_category(client, auth_headers)
+    product = client.post(
+        "/api/v1/products", json={"name": "8mm Round Onyx", "category_id": category["id"]}, headers=auth_headers
+    ).json()
+    vendor = client.post("/api/v1/vendors", json={"name": "Stonecraft Supply"}, headers=auth_headers).json()
+
+    po = client.post(
+        "/api/v1/purchase-orders",
+        json={
+            "vendor_id": vendor["id"],
+            "lines": [{"product_id": product["id"], "expected_quantity": 5, "expected_unit_type": "strand"}],
+        },
+        headers=auth_headers,
+    ).json()
+    line_id = po["lines"][0]["id"]
+
+    client.post(
+        f"/api/v1/purchase-orders/{po['id']}/receipts",
+        json={
+            "lines": [
+                {
+                    "purchase_order_line_id": line_id,
+                    "product_id": product["id"],
+                    "received_quantity": 5,
+                    "received_unit_type": "strand",
+                }
+            ]
+        },
+        headers=auth_headers,
+    )
+
+    po_lines_resp = client.get(f"/api/v1/products/{product['id']}/purchase-order-lines", headers=auth_headers)
+    assert po_lines_resp.status_code == 200
+    po_lines = po_lines_resp.json()
+    assert len(po_lines) == 1
+    assert po_lines[0]["vendor_name"] == "Stonecraft Supply"
+    assert po_lines[0]["purchase_order_id"] == po["id"]
+
+    receipt_lines_resp = client.get(f"/api/v1/products/{product['id']}/receipt-lines", headers=auth_headers)
+    assert receipt_lines_resp.status_code == 200
+    receipt_lines = receipt_lines_resp.json()
+    assert len(receipt_lines) == 1
+    assert receipt_lines[0]["vendor_name"] == "Stonecraft Supply"
+    assert receipt_lines[0]["receiving_status"] == "matched"

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { InventoryUnit, Location, ProductCategory } from "../../lib/types";
+import { describeItem } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
 
@@ -54,6 +55,7 @@ export function InventoryOnHandPage() {
             <tr>
               <th>Item</th>
               <th>Quantity</th>
+              <th>Location</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -61,13 +63,12 @@ export function InventoryOnHandPage() {
             {units.data.map((u) => (
               <tr key={u.id}>
                 <td>
-                  <Link to={`/inventory/${u.id}`}>
-                    {u.product_id ? "Linked product" : u.unresolved_description ?? "Unresolved"}
-                  </Link>
+                  <Link to={`/inventory/${u.id}`}>{describeItem(u)}</Link>
                 </td>
                 <td>
                   {u.quantity} {u.unit_type}
                 </td>
+                <td>{u.location_name ?? "—"}</td>
                 <td>
                   <StatusBadge status={u.status} />
                 </td>

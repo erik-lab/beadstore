@@ -58,6 +58,8 @@ class ReceiptLineRead(ORMModel):
     receipt_id: uuid.UUID
     purchase_order_line_id: uuid.UUID | None
     product_id: uuid.UUID | None
+    product_name: str | None = None
+    product_sku: str | None = None
     unresolved_item_description: str | None
     received_quantity: float
     received_unit_type: UnitType
@@ -65,6 +67,10 @@ class ReceiptLineRead(ORMModel):
     discrepancy_notes: str | None
     inventory_unit_id: uuid.UUID | None
     location_id: uuid.UUID | None
+    location_name: str | None = None
+    purchase_order_id: uuid.UUID | None = None
+    received_date: date | None = None
+    vendor_name: str | None = None
 
 
 class ReceiptRead(ORMModel):

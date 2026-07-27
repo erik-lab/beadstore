@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { Product, ReceiveResult, Vendor } from "../../lib/types";
-import { UNIT_TYPES } from "../../lib/types";
+import { UNIT_TYPES, describeItem } from "../../lib/types";
+import { StatusBadge } from "../../components/StatusBadge";
 
 interface LineDraft {
   productId: string;
@@ -82,16 +83,32 @@ export function QuickReceivePage() {
       <div>
         <h1>Received Without Prior Order — Saved</h1>
         <div className="alert alert-success">
-          A supplier order and receipt were created automatically and marked as created during receiving.
+          A supplier order and receipt were created automatically and marked as created during
+          receiving, so this stays traceable just like a normal order.
         </div>
-        <h2>Reconciliation Summary</h2>
-        <ul className="summary-list">
-          {Object.entries(result.summary).map(([status, count]) => (
-            <li key={status}>
-              {status}: {count}
-            </li>
-          ))}
-        </ul>
+        <h2>What Was Recorded</h2>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Received Qty</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.receipt.lines.map((line) => (
+              <tr key={line.id}>
+                <td>{describeItem(line)}</td>
+                <td>
+                  {line.received_quantity} {line.received_unit_type}
+                </td>
+                <td>
+                  <StatusBadge status={line.receiving_status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         <Link className="btn-primary" to={`/purchase-orders/${result.purchase_order_id}`}>
           View created supplier order
         </Link>

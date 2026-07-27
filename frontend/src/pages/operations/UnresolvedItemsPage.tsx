@@ -12,16 +12,23 @@ export function UnresolvedItemsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
-  async function resolveUnit(unitId: string) {
-    const productId = selectedProduct[unitId];
+  async function resolveUnit(unit: InventoryUnit) {
+    const productId = selectedProduct[unit.id];
     if (!productId) {
       setError("Choose a product to match this item to.");
       return;
     }
-    setResolving(unitId);
+    setResolving(unit.id);
     setError(null);
     try {
-      await api.patch(`/inventory-units/${unitId}`, { product_id: productId, status: "available" });
+      if (unit.receipt_line_id) {
+        // Resolves the receipt line and its linked inventory unit together, so the
+        // receiving history and current stock stay consistent with each other.
+        await api.patch(`/receipt-lines/${unit.receipt_line_id}/resolve?product_id=${productId}`);
+      } else {
+        // Manually-entered inventory unit with no receipt behind it — nothing else to sync.
+        await api.patch(`/inventory-units/${unit.id}`, { product_id: productId, status: "available" });
+      }
       units.reload();
     } catch (err) {
       setError(err instanceof ApiError ? String(err.detail) : "Could not resolve item.");
@@ -33,7 +40,10 @@ export function UnresolvedItemsPage() {
   return (
     <div>
       <h1>Items Needing Product Match</h1>
-      <p className="page-subtitle">These inventory units were received without a matching product.</p>
+      <p className="page-subtitle">
+        These stock records were received without a matching product. Match each one to an
+        existing product, or add the product first if it doesn't exist yet.
+      </p>
       {error && <div className="alert alert-error">{error}</div>}
       {units.loading && <Loading />}
       {units.error && <ErrorState message={units.error} />}
@@ -44,6 +54,9 @@ export function UnresolvedItemsPage() {
             <tr>
               <th>Description</th>
               <th>Quantity</th>
+              <th>Vendor</th>
+              <th>Received</th>
+              <th>Supplier Order</th>
               <th>Match to Product</th>
               <th></th>
             </tr>
@@ -56,6 +69,18 @@ export function UnresolvedItemsPage() {
                 </td>
                 <td>
                   {u.quantity} {u.unit_type}
+                </td>
+                <td>{u.vendor_name ?? "—"}</td>
+                <td>
+                  {u.received_date}
+                  {u.receipt_received_date ? ` (receipt: ${u.receipt_received_date})` : ""}
+                </td>
+                <td>
+                  {u.purchase_order_id ? (
+                    <Link to={`/purchase-orders/${u.purchase_order_id}`}>View order</Link>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td>
                   <select
@@ -71,7 +96,7 @@ export function UnresolvedItemsPage() {
                   </select>
                 </td>
                 <td>
-                  <button className="btn-secondary" onClick={() => resolveUnit(u.id)} disabled={resolving === u.id}>
+                  <button className="btn-secondary" onClick={() => resolveUnit(u)} disabled={resolving === u.id}>
                     {resolving === u.id ? "Matching..." : "Match"}
                   </button>
                 </td>

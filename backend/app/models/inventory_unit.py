@@ -2,11 +2,14 @@ import uuid
 from datetime import date
 
 from sqlalchemy import Date, Enum, ForeignKey, Numeric, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
 from app.models.enums import InventoryUnitStatus, UnitType
+from app.models.location import Location
 from app.models.mixins import AuditMixin, TimestampMixin, UUIDPKMixin
+from app.models.product import Product
+from app.models.vendor import Vendor
 
 
 class InventoryUnit(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
@@ -31,3 +34,30 @@ class InventoryUnit(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     )
     location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    product: Mapped[Product | None] = relationship(viewonly=True, lazy="joined")
+    vendor: Mapped[Vendor | None] = relationship(viewonly=True, lazy="joined")
+    location: Mapped[Location | None] = relationship(viewonly=True, lazy="joined")
+    receipt_line: Mapped["ReceiptLine | None"] = relationship(
+        viewonly=True, lazy="joined", foreign_keys=[receipt_line_id]
+    )
+
+    @property
+    def product_name(self) -> str | None:
+        return self.product.name if self.product else None
+
+    @property
+    def product_sku(self) -> str | None:
+        return self.product.sku if self.product else None
+
+    @property
+    def vendor_name(self) -> str | None:
+        return self.vendor.name if self.vendor else None
+
+    @property
+    def location_name(self) -> str | None:
+        return self.location.name if self.location else None
+
+    @property
+    def receipt_received_date(self) -> date | None:
+        return self.receipt_line.receipt.received_date if self.receipt_line else None

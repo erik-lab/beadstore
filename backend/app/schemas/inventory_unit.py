@@ -44,6 +44,8 @@ class InventoryUnitUpdate(BaseModel):
 class InventoryUnitRead(ORMModel):
     id: uuid.UUID
     product_id: uuid.UUID | None
+    product_name: str | None = None
+    product_sku: str | None = None
     unresolved_description: str | None
     quantity: float
     unit_type: UnitType
@@ -52,9 +54,12 @@ class InventoryUnitRead(ORMModel):
     cost_amount: float | None
     cost_currency: str | None
     vendor_id: uuid.UUID | None
+    vendor_name: str | None = None
     purchase_order_id: uuid.UUID | None
     receipt_line_id: uuid.UUID | None
+    receipt_received_date: date | None = None
     location_id: uuid.UUID | None
+    location_name: str | None = None
     notes: str | None
     created_at: datetime
     updated_at: datetime
