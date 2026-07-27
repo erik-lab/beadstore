@@ -1,0 +1,84 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+from app.models.enums import ActiveArchivedStatus, ImageStatus
+from app.schemas.common import ORMModel
+
+
+class ProductAttributes(BaseModel):
+    material: str | None = None
+    color: str | None = None
+    size: str | None = None
+    shape: str | None = None
+    finish: str | None = None
+    hole_size: str | None = None
+    origin: str | None = None
+    strand_length: str | None = None
+    count: str | None = None
+    grade: str | None = None
+    condition: str | None = None
+    attributes_json: str | None = None
+
+
+class ProductCreate(ProductAttributes):
+    name: str
+    category_id: uuid.UUID
+    subtype_id: uuid.UUID | None = None
+    description: str | None = None
+    sku: str | None = None
+    image_url: str | None = None
+    image_status: ImageStatus = ImageStatus.none
+    media_notes: str | None = None
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    category_id: uuid.UUID | None = None
+    subtype_id: uuid.UUID | None = None
+    description: str | None = None
+    sku: str | None = None
+    material: str | None = None
+    color: str | None = None
+    size: str | None = None
+    shape: str | None = None
+    finish: str | None = None
+    hole_size: str | None = None
+    origin: str | None = None
+    strand_length: str | None = None
+    count: str | None = None
+    grade: str | None = None
+    condition: str | None = None
+    attributes_json: str | None = None
+    image_url: str | None = None
+    image_status: ImageStatus | None = None
+    media_notes: str | None = None
+    status: ActiveArchivedStatus | None = None
+
+
+class ProductRead(ORMModel):
+    id: uuid.UUID
+    name: str
+    category_id: uuid.UUID
+    subtype_id: uuid.UUID | None
+    description: str | None
+    sku: str | None
+    material: str | None
+    color: str | None
+    size: str | None
+    shape: str | None
+    finish: str | None
+    hole_size: str | None
+    origin: str | None
+    strand_length: str | None
+    count: str | None
+    grade: str | None
+    condition: str | None
+    attributes_json: str | None
+    image_url: str | None
+    image_status: ImageStatus
+    media_notes: str | None
+    status: ActiveArchivedStatus
+    created_at: datetime
+    updated_at: datetime
