@@ -132,10 +132,12 @@ development.
 
 ## Deployment (Render)
 
-Two Render services: a **Web Service** for `backend/` and a **Static Site** for `frontend/`. See
-`docs/design/render-deployment-guide.md` for exact build/start commands, every environment
-variable each service needs, Supabase-side notes, and what to expect from free-tier sizing.
-Never commit real secrets to the repo — configure them in the Render dashboard.
+One Render **Web Service**, combining both halves: the backend build step also builds the
+frontend, and FastAPI serves the built frontend directly (static assets + a client-side-routing
+fallback) alongside the `/api/v1/*` endpoints. See `docs/design/render-deployment-guide.md` for
+the exact build/start commands, every environment variable, Supabase-side notes, and the tradeoffs
+of this single-service approach vs. running the frontend as its own service. Never commit real
+secrets to the repo — configure them in the Render dashboard.
 
 ## Installable App (PWA)
 
@@ -152,14 +154,15 @@ uninstall steps to share with Patti and Erik.
 into the built `dist/sw.js` (`scripts/stamp-sw-version.mjs`) — the source `public/sw.js` keeps a
 placeholder and is never hand-edited per release. The service worker's `activate` handler deletes
 any cache that doesn't match the current build's version, so every deploy automatically cleans up
-the previous one; nobody has to remember to bump a version number by hand. `public/_headers` also
-tells Render to serve `/sw.js`, `/index.html`, and `/manifest.webmanifest` with
-`Cache-Control: no-cache`, so the browser/CDN can't serve a stale copy of those specific files at
-the HTTP layer regardless of the service worker logic — hashed asset files under `/assets/` are
-long-cached instead, since their filename changes whenever their content does. This was verified
-by simulating two consecutive builds served from the same URL (mimicking a Render redeploy): the
-first build's cache populated as expected, and after swapping in the second build and forcing an
-update check, the old cache was fully deleted and only the new build's cache remained.
+the previous one; nobody has to remember to bump a version number by hand. The backend also
+explicitly serves `/sw.js`, `/index.html`, and `/manifest.webmanifest` with
+`Cache-Control: no-cache` (see `app/main.py`), so neither the browser nor any intermediary can
+serve a stale copy of those specific files regardless of the service worker logic — hashed asset
+files under `/assets/` are safe to cache long-term instead, since their filename changes whenever
+their content does. The cache-cleanup behavior was verified by simulating two consecutive builds
+served from the same URL (mimicking a redeploy): the first build's cache populated as expected,
+and after swapping in the second build and forcing an update check, the old cache was fully
+deleted and only the new build's cache remained.
 
 ## Manual Acceptance Checklist
 
