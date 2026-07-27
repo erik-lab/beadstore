@@ -14,6 +14,15 @@ def test_health_is_public(client):
     assert resp.json() == {"status": "ok"}
 
 
+def test_health_supports_head(client):
+    """Render's platform health check sends HEAD, not GET, before it will
+    route any real traffic to the instance -- a 405 here made Render treat
+    the whole service as unhealthy in production, well before browsers ever
+    saw a real request."""
+    resp = client.head("/health")
+    assert resp.status_code == 200
+
+
 def test_protected_route_requires_auth(client):
     resp = client.get("/api/v1/vendors")
     assert resp.status_code == 401

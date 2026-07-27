@@ -32,7 +32,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
 
@@ -62,15 +62,25 @@ if FRONTEND_DIST.is_dir():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
     app.mount("/icons", StaticFiles(directory=FRONTEND_DIST / "icons"), name="frontend-icons")
 
-    @app.get("/favicon.svg", include_in_schema=False)
+    # methods=["GET", "HEAD"] throughout: this FastAPI/Starlette version does
+    # NOT auto-add HEAD support to a plain @app.get() route. Render's own
+    # platform health check sends "HEAD /" before it will route any real
+    # traffic to the instance at all — a 405 there previously made Render
+    # treat the whole service as unhealthy and refuse to forward browser
+    # requests, which is what an actual visitor's blank "Not Found" page was
+    # (Render's own error page, not this app's) rather than anything in the
+    # app itself. Applied to all these routes, not just "/", since any of
+    # them could plausibly be probed the same way.
+
+    @app.api_route("/favicon.svg", methods=["GET", "HEAD"], include_in_schema=False)
     def favicon() -> FileResponse:
         return FileResponse(FRONTEND_DIST / "favicon.svg")
 
-    @app.get("/icons.svg", include_in_schema=False)
+    @app.api_route("/icons.svg", methods=["GET", "HEAD"], include_in_schema=False)
     def icons_svg() -> FileResponse:
         return FileResponse(FRONTEND_DIST / "icons.svg")
 
-    @app.get("/manifest.webmanifest", include_in_schema=False)
+    @app.api_route("/manifest.webmanifest", methods=["GET", "HEAD"], include_in_schema=False)
     def manifest() -> FileResponse:
         return FileResponse(
             FRONTEND_DIST / "manifest.webmanifest",
@@ -78,15 +88,15 @@ if FRONTEND_DIST.is_dir():
             headers=NO_CACHE_HEADERS,
         )
 
-    @app.get("/sw.js", include_in_schema=False)
+    @app.api_route("/sw.js", methods=["GET", "HEAD"], include_in_schema=False)
     def service_worker() -> FileResponse:
         # Never cache the service worker script itself — see
         # scripts/stamp-sw-version.mjs and the "Cache versioning" section of
         # the README for why this matters for picking up new deploys.
         return FileResponse(FRONTEND_DIST / "sw.js", media_type="text/javascript", headers=NO_CACHE_HEADERS)
 
-    @app.get("/", include_in_schema=False)
-    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa_fallback(full_path: str = "") -> FileResponse:
         # Client-side routing (React Router) owns everything not already
         # matched above by an API route or a static file — reject anything
