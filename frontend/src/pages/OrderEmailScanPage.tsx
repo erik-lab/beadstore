@@ -58,7 +58,7 @@ export function OrderEmailScanPage() {
     setBusyId(email.id);
     try {
       const detail = await fetchEmailDetail(CLIENT_ID, email.id);
-      const parsed = parseOrderEmail(detail, vendors.data ?? []);
+      const parsed = await parseOrderEmail(detail, vendors.data ?? []);
 
       // Find or create the vendor.
       let vendorId = parsed.vendorMatch?.id;
@@ -101,7 +101,7 @@ export function OrderEmailScanPage() {
       const order = await api.post<PurchaseOrder>("/purchase-orders", {
         vendor_id: vendorId,
         order_date: parsed.orderDate,
-        notes: `Created from Gmail scan.\nEmail: "${detail.subject}" from ${detail.from} on ${detail.date}.${
+        notes: `Created from Gmail scan (parsed ${parsed.parsedByAi ? "by AI" : "with basic pattern matching"}).\nEmail: "${detail.subject}" from ${detail.from} on ${detail.date}.${
           parsed.lines.length === 0
             ? "\nNo line items could be read from the email — please edit the order lines."
             : ""
@@ -130,9 +130,10 @@ export function OrderEmailScanPage() {
       <p className="page-subtitle">
         Scans your Gmail inbox (last ~6 months) for emails that look like bead-supply order
         confirmations — from your known vendors or mentioning bead-related terms. Use View to read
-        an email, or Record Order to turn it into a supplier order (best-effort parsing — review
-        the created order and fix anything it misread). The Gmail connection isn't remembered;
-        you'll re-authorize each time you scan.
+        an email, or Record Order to turn it into a supplier order. Record Order uses AI to read
+        the order details and item list from the email body and any attached invoice/receipt
+        (PDF or image) — review the created order and fix anything it misread. The Gmail
+        connection isn't remembered; you'll re-authorize each time you scan.
       </p>
 
       {!CLIENT_ID && (

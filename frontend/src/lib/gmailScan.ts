@@ -217,6 +217,12 @@ export async function scanGmailForOrderEmails(
   return candidates;
 }
 
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  base64Data: string;
+}
+
 export interface EmailDetail {
   id: string;
   from: string;
@@ -224,13 +230,26 @@ export interface EmailDetail {
   subject: string;
   date: string;
   bodyText: string;
+  attachments: EmailAttachment[];
 }
 
 interface MessagePart {
   mimeType?: string;
-  body?: { data?: string };
+  filename?: string;
+  body?: { data?: string; attachmentId?: string; size?: number };
   parts?: MessagePart[];
 }
+
+// Attachment types the AI parser can read directly.
+const PARSEABLE_ATTACHMENT_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+const MAX_ATTACHMENTS = 3;
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
 function decodeBase64Url(data: string): string {
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -266,7 +285,38 @@ function extractBodyText(payload: MessagePart): string {
   return "";
 }
 
-/** Fetch one email's headers and readable body text (for View / Record Order). */
+interface AttachmentRef {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+  size: number;
+}
+
+function collectAttachmentRefs(part: MessagePart, found: AttachmentRef[]): void {
+  if (
+    part.filename &&
+    part.body?.attachmentId &&
+    part.mimeType &&
+    PARSEABLE_ATTACHMENT_TYPES.has(part.mimeType) &&
+    (part.body.size ?? 0) <= MAX_ATTACHMENT_BYTES
+  ) {
+    found.push({
+      filename: part.filename,
+      mimeType: part.mimeType,
+      attachmentId: part.body.attachmentId,
+      size: part.body.size ?? 0,
+    });
+  }
+  for (const child of part.parts ?? []) {
+    collectAttachmentRefs(child, found);
+  }
+}
+
+function base64UrlToStandard(data: string): string {
+  return data.replace(/-/g, "+").replace(/_/g, "/");
+}
+
+/** Fetch one email's headers, readable body text, and parseable attachments (for View / Record Order). */
 export async function fetchEmailDetail(clientId: string, messageId: string): Promise<EmailDetail> {
   const msg = (await gmailGet(clientId, `/messages/${messageId}?format=full`)) as {
     id: string;
@@ -274,6 +324,23 @@ export async function fetchEmailDetail(clientId: string, messageId: string): Pro
     payload?: MessagePart & { headers?: { name: string; value: string }[] };
   };
   const headers = msg.payload?.headers ?? [];
+
+  const attachmentRefs: AttachmentRef[] = [];
+  if (msg.payload) collectAttachmentRefs(msg.payload, attachmentRefs);
+  const attachments: EmailAttachment[] = [];
+  for (const ref of attachmentRefs.slice(0, MAX_ATTACHMENTS)) {
+    const data = (await gmailGet(clientId, `/messages/${messageId}/attachments/${ref.attachmentId}`)) as {
+      data?: string;
+    };
+    if (data.data) {
+      attachments.push({
+        filename: ref.filename,
+        mimeType: ref.mimeType,
+        base64Data: base64UrlToStandard(data.data),
+      });
+    }
+  }
+
   return {
     id: msg.id,
     from: headerValue(headers, "From"),
@@ -281,5 +348,6 @@ export async function fetchEmailDetail(clientId: string, messageId: string): Pro
     subject: headerValue(headers, "Subject"),
     date: headerValue(headers, "Date"),
     bodyText: (msg.payload ? extractBodyText(msg.payload) : "") || msg.snippet || "",
+    attachments,
   };
 }

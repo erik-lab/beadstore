@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     supabase_jwt_audience: str = "authenticated"
     allow_public_signup: bool = False
     cors_origins: str = "http://localhost:5173"
+    # Enables AI-assisted order email parsing (Order Email Scan → Record Order).
+    anthropic_api_key: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

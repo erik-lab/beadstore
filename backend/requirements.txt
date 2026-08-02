@@ -5,6 +5,7 @@ alembic>=1.13,<1.14
 pydantic>=2.7,<3.0
 pydantic-settings>=2.3,<3.0
 pyjwt[crypto]>=2.8,<3.0
+anthropic>=0.79
 psycopg2-binary>=2.9,<3.0
 python-dotenv>=1.0,<2.0
 
