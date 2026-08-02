@@ -40,6 +40,7 @@ SIDEBAR_HINTS = {
     "vendors": "The suppliers you order beads and supplies from.",
     "purchase-orders": "Orders placed with vendors — track what's been ordered, and whether it's arrived yet.",
     "quick-receive": "Log stock that arrived without a prior order on file.",
+    "order-email-scan": "Scan your Gmail inbox for emails that look like supplier order confirmations.",
     "locations": "Where inventory is physically stored (shelves, bins, rooms, etc.).",
     "utilities": "Maintenance tools — manage categories, subtypes, and the help text shown throughout the app.",
 }

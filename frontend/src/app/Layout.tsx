@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/vendors", label: "Vendors", hintKey: "vendors" },
   { to: "/purchase-orders", label: "Supplier Orders", hintKey: "purchase-orders" },
   { to: "/receiving/quick-receive", label: "Quick Receive", hintKey: "quick-receive" },
+  { to: "/order-email-scan", label: "Order Email Scan", hintKey: "order-email-scan" },
   { to: "/locations", label: "Locations", hintKey: "locations" },
   { to: "/utilities", label: "Utilities", hintKey: "utilities" },
 ];

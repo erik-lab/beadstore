@@ -27,6 +27,7 @@ import { OpenOrdersPage } from "./pages/operations/OpenOrdersPage";
 import { InventoryOnHandPage } from "./pages/operations/InventoryOnHandPage";
 import { UnresolvedItemsPage } from "./pages/operations/UnresolvedItemsPage";
 import { DiscrepanciesPage } from "./pages/operations/DiscrepanciesPage";
+import { OrderEmailScanPage } from "./pages/OrderEmailScanPage";
 import { UtilitiesPage } from "./pages/utilities/UtilitiesPage";
 import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
 import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
@@ -76,6 +77,8 @@ function App() {
           <Route path="purchase-orders/:id/receive" element={<ReceivePage />} />
 
           <Route path="receiving/quick-receive" element={<QuickReceivePage />} />
+
+          <Route path="order-email-scan" element={<OrderEmailScanPage />} />
 
           <Route path="operations/open-orders" element={<OpenOrdersPage />} />
           <Route path="operations/inventory-on-hand" element={<InventoryOnHandPage />} />
