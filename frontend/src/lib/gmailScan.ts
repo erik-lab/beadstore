@@ -94,6 +94,11 @@ function loadGsi(): Promise<void> {
   return gsiLoaded;
 }
 
+// Access token for the current page visit only — module memory, never
+// persisted. Reused so View/Record clicks after a scan don't re-prompt;
+// cleared (and re-authorized) if Gmail rejects it as expired.
+let currentToken: string | null = null;
+
 async function requestAccessToken(clientId: string): Promise<string> {
   await loadGsi();
   return new Promise((resolve, reject) => {
@@ -102,6 +107,7 @@ async function requestAccessToken(clientId: string): Promise<string> {
       scope: GMAIL_SCOPE,
       callback: (response) => {
         if (response.access_token) {
+          currentToken = response.access_token;
           resolve(response.access_token);
         } else {
           reject(new Error(response.error ?? "Gmail authorization was cancelled."));
@@ -112,10 +118,23 @@ async function requestAccessToken(clientId: string): Promise<string> {
   });
 }
 
-async function gmailGet(token: string, path: string): Promise<Record<string, unknown>> {
-  const resp = await fetch(`${GMAIL_API}${path}`, {
+async function ensureToken(clientId: string): Promise<string> {
+  return currentToken ?? requestAccessToken(clientId);
+}
+
+async function gmailGet(clientId: string, path: string): Promise<Record<string, unknown>> {
+  let token = await ensureToken(clientId);
+  let resp = await fetch(`${GMAIL_API}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (resp.status === 401) {
+    // Token expired mid-session — re-authorize once and retry.
+    currentToken = null;
+    token = await requestAccessToken(clientId);
+    resp = await fetch(`${GMAIL_API}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
   if (!resp.ok) {
     throw new Error(`Gmail request failed (${resp.status}). Try scanning again.`);
   }
@@ -154,10 +173,11 @@ export async function scanGmailForOrderEmails(
   clientId: string,
   vendorNames: string[]
 ): Promise<CandidateEmail[]> {
-  const token = await requestAccessToken(clientId);
+  currentToken = null; // a fresh scan always re-authorizes
+  await requestAccessToken(clientId);
 
   const list = (await gmailGet(
-    token,
+    clientId,
     `/messages?q=${encodeURIComponent(ORDER_QUERY)}&maxResults=${MAX_MESSAGES}`
   )) as { messages?: { id: string }[] };
 
@@ -172,7 +192,7 @@ export async function scanGmailForOrderEmails(
       chunk.map(
         (id) =>
           gmailGet(
-            token,
+            clientId,
             `/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`
           ) as Promise<{
             id: string;
@@ -195,4 +215,71 @@ export async function scanGmailForOrderEmails(
   }
 
   return candidates;
+}
+
+export interface EmailDetail {
+  id: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  bodyText: string;
+}
+
+interface MessagePart {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: MessagePart[];
+}
+
+function decodeBase64Url(data: string): string {
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function htmlToText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("style, script, head").forEach((el) => el.remove());
+  const text = doc.body?.innerText ?? doc.body?.textContent ?? "";
+  return text.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function collectParts(part: MessagePart, mimeType: string, found: string[]): void {
+  if (part.mimeType === mimeType && part.body?.data) {
+    found.push(decodeBase64Url(part.body.data));
+  }
+  for (const child of part.parts ?? []) {
+    collectParts(child, mimeType, found);
+  }
+}
+
+function extractBodyText(payload: MessagePart): string {
+  const plain: string[] = [];
+  collectParts(payload, "text/plain", plain);
+  if (plain.length > 0) return plain.join("\n").trim();
+
+  const html: string[] = [];
+  collectParts(payload, "text/html", html);
+  if (html.length > 0) return htmlToText(html.join("\n"));
+
+  return "";
+}
+
+/** Fetch one email's headers and readable body text (for View / Record Order). */
+export async function fetchEmailDetail(clientId: string, messageId: string): Promise<EmailDetail> {
+  const msg = (await gmailGet(clientId, `/messages/${messageId}?format=full`)) as {
+    id: string;
+    snippet?: string;
+    payload?: MessagePart & { headers?: { name: string; value: string }[] };
+  };
+  const headers = msg.payload?.headers ?? [];
+  return {
+    id: msg.id,
+    from: headerValue(headers, "From"),
+    to: headerValue(headers, "To"),
+    subject: headerValue(headers, "Subject"),
+    date: headerValue(headers, "Date"),
+    bodyText: (msg.payload ? extractBodyText(msg.payload) : "") || msg.snippet || "",
+  };
 }
