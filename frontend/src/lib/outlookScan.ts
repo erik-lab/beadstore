@@ -11,6 +11,7 @@
 // Page Application" with this site's URL as a redirect URI).
 
 import { matchReasons, type CandidateEmail, type EmailAttachment, type EmailDetail, type EmailProviderAdapter, type MoveEmailResult } from "./emailScanTypes";
+import { withTimeout } from "./promiseUtils";
 
 const MSAL_SRC = "https://alcdn.msauth.net/browser/3.7.1/js/msal-browser.min.js";
 const GRAPH_API = "https://graph.microsoft.com/v1.0";
@@ -25,6 +26,10 @@ export const OUTLOOK_ORDERS_FOLDER_NAME =
 // How far back to look, and how many messages to inspect per scan.
 const SEARCH_WINDOW_DAYS = 180;
 const MAX_MESSAGES = 60;
+
+// Backstop in case the sign-in popup never settles (e.g. the browser blocks
+// it silently), so a "Scanning..." button state can never hang indefinitely.
+const AUTH_TIMEOUT_MS = 90_000;
 
 interface MsalAccount {
   username: string;
@@ -91,7 +96,11 @@ let currentToken: string | null = null;
 
 async function requestAccessToken(): Promise<string> {
   const client = await getPca();
-  const result = await client.loginPopup({ scopes: [GRAPH_SCOPE] });
+  const result = await withTimeout(
+    client.loginPopup({ scopes: [GRAPH_SCOPE] }),
+    AUTH_TIMEOUT_MS,
+    "Outlook sign-in timed out or was cancelled. Please try again."
+  );
   currentToken = result.accessToken;
   return result.accessToken;
 }

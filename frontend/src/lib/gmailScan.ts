@@ -9,6 +9,7 @@
 // origin).
 
 import { matchReasons, type CandidateEmail, type EmailAttachment, type EmailDetail, type EmailProviderAdapter, type MoveEmailResult } from "./emailScanTypes";
+import { withTimeout } from "./promiseUtils";
 
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
@@ -29,6 +30,11 @@ const MAX_MESSAGES = 60;
 // orders label (or archived/other labels) by a prior Record Order run.
 const ORDER_QUERY = `in:inbox ${SEARCH_WINDOW} (subject:order OR subject:confirmation OR subject:shipped OR subject:shipment OR subject:receipt OR subject:invoice OR subject:"thank you for your purchase")`;
 
+// If the sign-in popup never calls back — most commonly because the user
+// closed it manually rather than completing or explicitly denying consent —
+// this bounds how long a scan/view/record action can sit stuck on "...".
+const AUTH_TIMEOUT_MS = 90_000;
+
 interface TokenClient {
   requestAccessToken: () => void;
 }
@@ -42,6 +48,7 @@ declare global {
             client_id: string;
             scope: string;
             callback: (response: { access_token?: string; error?: string }) => void;
+            error_callback?: (error: { type?: string; message?: string }) => void;
           }) => TokenClient;
         };
       };
@@ -75,7 +82,7 @@ let currentToken: string | null = null;
 
 async function requestAccessToken(): Promise<string> {
   await loadGsi();
-  return new Promise((resolve, reject) => {
+  const popupPromise = new Promise<string>((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: GMAIL_SCOPE,
@@ -84,12 +91,21 @@ async function requestAccessToken(): Promise<string> {
           currentToken = response.access_token;
           resolve(response.access_token);
         } else {
-          reject(new Error(response.error ?? "Gmail authorization was cancelled."));
+          reject(new Error(response.error ?? "Gmail sign-in was cancelled."));
         }
+      },
+      // Google's own callback is not always invoked when the user closes the
+      // popup manually (rather than completing or denying it); error_callback
+      // catches that case when the browser does fire it.
+      error_callback: (error) => {
+        reject(new Error(error?.message || "Gmail sign-in was cancelled."));
       },
     });
     client.requestAccessToken();
   });
+  // Backstop for the cases error_callback also misses, so the caller's
+  // "Scanning..." state can never hang indefinitely.
+  return withTimeout(popupPromise, AUTH_TIMEOUT_MS, "Gmail sign-in timed out or was cancelled. Please try again.");
 }
 
 async function ensureToken(): Promise<string> {

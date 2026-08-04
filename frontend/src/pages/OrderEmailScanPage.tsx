@@ -30,20 +30,26 @@ export function OrderEmailScanPage() {
       </p>
 
       <div className="form-actions line-row">
-        <button
-          className="btn-primary"
-          onClick={gmailScan.runScan}
-          disabled={gmailScan.scanning || !gmailAdapter.configured}
-        >
-          {gmailScan.scanning ? "Scanning..." : "Connect Gmail & Scan"}
-        </button>
-        <button
-          className="btn-primary"
-          onClick={outlookScan.runScan}
-          disabled={outlookScan.scanning || !outlookAdapter.configured}
-        >
-          {outlookScan.scanning ? "Scanning..." : "Connect Outlook & Scan"}
-        </button>
+        <div className="scan-trigger">
+          <button
+            className="btn-primary"
+            onClick={gmailScan.runScan}
+            disabled={gmailScan.scanning || !gmailAdapter.configured}
+          >
+            {gmailScan.scanning ? "Scanning..." : "Connect Gmail & Scan"}
+          </button>
+          {gmailScan.scanning && <div className="scan-status">Waiting for Gmail sign-in…</div>}
+        </div>
+        <div className="scan-trigger">
+          <button
+            className="btn-primary"
+            onClick={outlookScan.runScan}
+            disabled={outlookScan.scanning || !outlookAdapter.configured}
+          >
+            {outlookScan.scanning ? "Scanning..." : "Connect Outlook & Scan"}
+          </button>
+          {outlookScan.scanning && <div className="scan-status">Waiting for Outlook sign-in…</div>}
+        </div>
       </div>
 
       <EmailScanSection scan={gmailScan} />
