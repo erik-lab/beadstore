@@ -8,9 +8,12 @@
 // from Google Cloud Console with this app's URL as an authorized JavaScript
 // origin).
 
+import { matchReasons, type CandidateEmail, type EmailAttachment, type EmailDetail, type EmailProviderAdapter, type MoveEmailResult } from "./emailScanTypes";
+
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
+const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? "";
 
 // The label ("folder") a recorded order's email is moved into. Configurable
 // via VITE_GMAIL_ORDERS_LABEL until there's an in-app settings page for it.
@@ -22,45 +25,9 @@ const SEARCH_WINDOW = "newer_than:180d";
 const MAX_MESSAGES = 60;
 
 // Broad "looks like an order email" Gmail search; refined client-side below.
-const ORDER_QUERY = `${SEARCH_WINDOW} (subject:order OR subject:confirmation OR subject:shipped OR subject:shipment OR subject:receipt OR subject:invoice OR subject:"thank you for your purchase")`;
-
-// Bead/jewelry-supply signals checked against sender and subject.
-const BEAD_KEYWORDS = [
-  "bead",
-  "beads",
-  "beading",
-  "gem",
-  "gems",
-  "gemstone",
-  "jewelry",
-  "jewellery",
-  "findings",
-  "cabochon",
-  "lampwork",
-  "seed bead",
-  "swarovski",
-  "czech glass",
-  "rhinestone",
-  "charms",
-  "pendants",
-  "wire wrap",
-  "fire mountain",
-  "dakota stones",
-  "beadaholique",
-  "shipwreck beads",
-  "rio grande",
-  "halcraft",
-  "john bead",
-];
-
-export interface CandidateEmail {
-  id: string;
-  from: string;
-  subject: string;
-  date: string;
-  snippet: string;
-  matchReasons: string[];
-}
+// "in:inbox" keeps this from re-surfacing emails already filed into the
+// orders label (or archived/other labels) by a prior Record Order run.
+const ORDER_QUERY = `in:inbox ${SEARCH_WINDOW} (subject:order OR subject:confirmation OR subject:shipped OR subject:shipment OR subject:receipt OR subject:invoice OR subject:"thank you for your purchase")`;
 
 interface TokenClient {
   requestAccessToken: () => void;
@@ -106,11 +73,11 @@ function loadGsi(): Promise<void> {
 // cleared (and re-authorized) if Gmail rejects it as expired.
 let currentToken: string | null = null;
 
-async function requestAccessToken(clientId: string): Promise<string> {
+async function requestAccessToken(): Promise<string> {
   await loadGsi();
   return new Promise((resolve, reject) => {
     const client = window.google!.accounts.oauth2.initTokenClient({
-      client_id: clientId,
+      client_id: CLIENT_ID,
       scope: GMAIL_SCOPE,
       callback: (response) => {
         if (response.access_token) {
@@ -125,8 +92,8 @@ async function requestAccessToken(clientId: string): Promise<string> {
   });
 }
 
-async function ensureToken(clientId: string): Promise<string> {
-  return currentToken ?? requestAccessToken(clientId);
+async function ensureToken(): Promise<string> {
+  return currentToken ?? requestAccessToken();
 }
 
 class GmailApiError extends Error {
@@ -137,12 +104,8 @@ class GmailApiError extends Error {
   }
 }
 
-async function gmailRequest(
-  clientId: string,
-  path: string,
-  init: RequestInit = {}
-): Promise<Record<string, unknown>> {
-  let token = await ensureToken(clientId);
+async function gmailRequest(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  let token = await ensureToken();
   const doFetch = (t: string) =>
     fetch(`${GMAIL_API}${path}`, {
       ...init,
@@ -157,7 +120,7 @@ async function gmailRequest(
   if (resp.status === 401) {
     // Token expired mid-session — re-authorize once and retry.
     currentToken = null;
-    token = await requestAccessToken(clientId);
+    token = await requestAccessToken();
     resp = await doFetch(token);
   }
   if (!resp.ok) {
@@ -167,35 +130,16 @@ async function gmailRequest(
   return resp.json();
 }
 
-async function gmailGet(clientId: string, path: string): Promise<Record<string, unknown>> {
-  return gmailRequest(clientId, path);
+async function gmailGet(path: string): Promise<Record<string, unknown>> {
+  return gmailRequest(path);
 }
 
-async function gmailPost(clientId: string, path: string, body: unknown): Promise<Record<string, unknown>> {
-  return gmailRequest(clientId, path, { method: "POST", body: JSON.stringify(body) });
+async function gmailPost(path: string, body: unknown): Promise<Record<string, unknown>> {
+  return gmailRequest(path, { method: "POST", body: JSON.stringify(body) });
 }
 
 function headerValue(headers: { name: string; value: string }[], name: string): string {
   return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
-}
-
-function matchReasons(from: string, subject: string, snippet: string, vendorNames: string[]): string[] {
-  const reasons: string[] = [];
-  const haystack = `${from} ${subject} ${snippet}`.toLowerCase();
-
-  for (const vendor of vendorNames) {
-    const name = vendor.trim().toLowerCase();
-    if (name.length >= 4 && haystack.includes(name)) {
-      reasons.push(`Matches your vendor "${vendor}"`);
-    }
-  }
-
-  const keywordHits = BEAD_KEYWORDS.filter((kw) => haystack.includes(kw));
-  if (keywordHits.length > 0) {
-    reasons.push(`Mentions: ${keywordHits.slice(0, 4).join(", ")}`);
-  }
-
-  return reasons;
 }
 
 /**
@@ -203,17 +147,13 @@ function matchReasons(from: string, subject: string, snippet: string, vendorName
  * vendor list so emails from suppliers Patti already uses always match, even
  * without generic bead keywords.
  */
-export async function scanGmailForOrderEmails(
-  clientId: string,
-  vendorNames: string[]
-): Promise<CandidateEmail[]> {
+async function scanGmailForOrderEmails(vendorNames: string[]): Promise<CandidateEmail[]> {
   currentToken = null; // a fresh scan always re-authorizes
-  await requestAccessToken(clientId);
+  await requestAccessToken();
 
-  const list = (await gmailGet(
-    clientId,
-    `/messages?q=${encodeURIComponent(ORDER_QUERY)}&maxResults=${MAX_MESSAGES}`
-  )) as { messages?: { id: string }[] };
+  const list = (await gmailGet(`/messages?q=${encodeURIComponent(ORDER_QUERY)}&maxResults=${MAX_MESSAGES}`)) as {
+    messages?: { id: string }[];
+  };
 
   const ids = (list.messages ?? []).map((m) => m.id);
   const candidates: CandidateEmail[] = [];
@@ -226,7 +166,6 @@ export async function scanGmailForOrderEmails(
       chunk.map(
         (id) =>
           gmailGet(
-            clientId,
             `/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`
           ) as Promise<{
             id: string;
@@ -249,22 +188,6 @@ export async function scanGmailForOrderEmails(
   }
 
   return candidates;
-}
-
-export interface EmailAttachment {
-  filename: string;
-  mimeType: string;
-  base64Data: string;
-}
-
-export interface EmailDetail {
-  id: string;
-  from: string;
-  to: string;
-  subject: string;
-  date: string;
-  bodyText: string;
-  attachments: EmailAttachment[];
 }
 
 interface MessagePart {
@@ -351,8 +274,8 @@ function base64UrlToStandard(data: string): string {
 }
 
 /** Fetch one email's headers, readable body text, and parseable attachments (for View / Record Order). */
-export async function fetchEmailDetail(clientId: string, messageId: string): Promise<EmailDetail> {
-  const msg = (await gmailGet(clientId, `/messages/${messageId}?format=full`)) as {
+async function fetchGmailEmailDetail(messageId: string): Promise<EmailDetail> {
+  const msg = (await gmailGet(`/messages/${messageId}?format=full`)) as {
     id: string;
     snippet?: string;
     payload?: MessagePart & { headers?: { name: string; value: string }[] };
@@ -363,7 +286,7 @@ export async function fetchEmailDetail(clientId: string, messageId: string): Pro
   if (msg.payload) collectAttachmentRefs(msg.payload, attachmentRefs);
   const attachments: EmailAttachment[] = [];
   for (const ref of attachmentRefs.slice(0, MAX_ATTACHMENTS)) {
-    const data = (await gmailGet(clientId, `/messages/${messageId}/attachments/${ref.attachmentId}`)) as {
+    const data = (await gmailGet(`/messages/${messageId}/attachments/${ref.attachmentId}`)) as {
       data?: string;
     };
     if (data.data) {
@@ -386,23 +309,19 @@ export async function fetchEmailDetail(clientId: string, messageId: string): Pro
   };
 }
 
-export type MoveEmailResult =
-  | { moved: true }
-  | { moved: false; reason: "permission" | "error"; message: string };
-
 let cachedLabelId: string | null = null;
 
-async function findOrCreateLabel(clientId: string, labelName: string): Promise<string> {
+async function findOrCreateLabel(labelName: string): Promise<string> {
   if (cachedLabelId) return cachedLabelId;
 
-  const list = (await gmailGet(clientId, "/labels")) as { labels?: { id: string; name: string }[] };
+  const list = (await gmailGet("/labels")) as { labels?: { id: string; name: string }[] };
   const existing = (list.labels ?? []).find((l) => l.name === labelName);
   if (existing) {
     cachedLabelId = existing.id;
     return existing.id;
   }
 
-  const created = (await gmailPost(clientId, "/labels", {
+  const created = (await gmailPost("/labels", {
     name: labelName,
     labelListVisibility: "labelShow",
     messageListVisibility: "show",
@@ -418,14 +337,10 @@ async function findOrCreateLabel(clientId: string, labelName: string): Promise<s
  * throws: a missing gmail.modify grant or any other failure comes back as
  * `{ moved: false }` so the caller can toast it and leave the email alone.
  */
-export async function moveEmailToOrdersLabel(
-  clientId: string,
-  messageId: string,
-  labelName: string = ORDERS_LABEL_NAME
-): Promise<MoveEmailResult> {
+async function moveEmailToOrdersLabel(messageId: string): Promise<MoveEmailResult> {
   try {
-    const labelId = await findOrCreateLabel(clientId, labelName);
-    await gmailPost(clientId, `/messages/${messageId}/modify`, {
+    const labelId = await findOrCreateLabel(ORDERS_LABEL_NAME);
+    await gmailPost(`/messages/${messageId}/modify`, {
       addLabelIds: [labelId],
       removeLabelIds: ["INBOX"],
     });
@@ -435,13 +350,25 @@ export async function moveEmailToOrdersLabel(
       return {
         moved: false,
         reason: "permission",
-        message: `Gmail didn't grant permission to move this email into "${labelName}". The order was still recorded — grant the additional Gmail permission next time you scan if you'd like emails filed automatically.`,
+        message: `Gmail didn't grant permission to move this email into "${ORDERS_LABEL_NAME}". The order was still recorded — grant the additional Gmail permission next time you scan if you'd like emails filed automatically.`,
       };
     }
     return {
       moved: false,
       reason: "error",
-      message: `Could not move this email into "${labelName}" (it's still in your inbox). The order was recorded successfully.`,
+      message: `Could not move this email into "${ORDERS_LABEL_NAME}" (it's still in your inbox). The order was recorded successfully.`,
     };
   }
 }
+
+export const gmailAdapter: EmailProviderAdapter = {
+  id: "gmail",
+  label: "Gmail",
+  configured: Boolean(CLIENT_ID),
+  notConfiguredMessage:
+    "Gmail scanning isn't configured yet. An administrator needs to set the VITE_GOOGLE_CLIENT_ID environment variable to a Google OAuth client ID (with this site as an authorized JavaScript origin) and redeploy.",
+  ordersFolderName: ORDERS_LABEL_NAME,
+  scanForOrderEmails: scanGmailForOrderEmails,
+  fetchEmailDetail: fetchGmailEmailDetail,
+  moveEmailToOrdersFolder: moveEmailToOrdersLabel,
+};

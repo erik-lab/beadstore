@@ -1,5 +1,5 @@
 import { api, ApiError } from "./apiClient";
-import type { EmailDetail } from "./gmailScan";
+import type { EmailDetail } from "./emailScanTypes";
 import type { Vendor } from "./types";
 
 export interface ParsedOrderLine {
