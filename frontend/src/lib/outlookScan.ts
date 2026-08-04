@@ -13,7 +13,15 @@
 import { matchReasons, type CandidateEmail, type EmailAttachment, type EmailDetail, type EmailProviderAdapter, type MoveEmailResult } from "./emailScanTypes";
 import { withTimeout } from "./promiseUtils";
 
-const MSAL_SRC = "https://alcdn.msauth.net/browser/3.7.1/js/msal-browser.min.js";
+// Two independent CDN sources for the same pinned msal-browser version —
+// Microsoft's own CDN first, falling back to jsDelivr if that host is
+// unreachable (blocked by a browser extension, network policy, etc.) so a
+// single CDN hiccup doesn't take down the whole Outlook connect button.
+const MSAL_VERSION = "3.30.0";
+const MSAL_SOURCES = [
+  `https://alcdn.msauth.net/browser/${MSAL_VERSION}/js/msal-browser.min.js`,
+  `https://cdn.jsdelivr.net/npm/@azure/msal-browser@${MSAL_VERSION}/lib/msal-browser.min.js`,
+];
 const GRAPH_API = "https://graph.microsoft.com/v1.0";
 const GRAPH_SCOPE = "Mail.ReadWrite";
 const CLIENT_ID = (import.meta.env.VITE_MICROSOFT_CLIENT_ID as string | undefined) ?? "";
@@ -59,20 +67,33 @@ declare global {
 
 let msalLoaded: Promise<void> | null = null;
 
-function loadMsal(): Promise<void> {
-  if (window.msal?.PublicClientApplication) return Promise.resolve();
-  if (msalLoaded) return msalLoaded;
-  msalLoaded = new Promise((resolve, reject) => {
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = MSAL_SRC;
+    script.src = src;
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => {
-      msalLoaded = null;
-      reject(new Error("Could not load Microsoft sign-in. Check your network and try again."));
-    };
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(script);
   });
+}
+
+async function loadMsal(): Promise<void> {
+  if (window.msal?.PublicClientApplication) return;
+  if (msalLoaded) return msalLoaded;
+  msalLoaded = (async () => {
+    let lastError: unknown;
+    for (const src of MSAL_SOURCES) {
+      try {
+        await loadScript(src);
+        if (window.msal?.PublicClientApplication) return;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    msalLoaded = null;
+    throw new Error("Could not load Microsoft sign-in. Check your network and try again.", { cause: lastError });
+  })();
   return msalLoaded;
 }
 
