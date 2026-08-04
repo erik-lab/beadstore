@@ -103,7 +103,11 @@ async function getPca(): Promise<MsalPublicClientApplication> {
   await loadMsal();
   if (!pca) {
     pca = new window.msal!.PublicClientApplication({
-      auth: { clientId: CLIENT_ID, authority: "https://login.microsoftonline.com/common" },
+      // /organizations (not /common) — this is a work/school (business) email
+      // connection only. Most Azure app registrations default to "single
+      // tenant", which rejects /common's implied personal-account support
+      // with "unauthorized_client ... not enabled for consumers".
+      auth: { clientId: CLIENT_ID, authority: "https://login.microsoftonline.com/organizations" },
     });
     await pca.initialize();
   }
