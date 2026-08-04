@@ -11,6 +11,11 @@ const UTILITIES = [
     title: "Product Categories",
     description: "Rename product categories and subtypes, or add new ones.",
   },
+  {
+    to: "/locations",
+    title: "Locations",
+    description: "Manage storage locations used for inventory units.",
+  },
 ];
 
 export function UtilitiesPage() {

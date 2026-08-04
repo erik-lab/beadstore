@@ -17,7 +17,6 @@ export const HINT_LOCATIONS: HintLocation[] = [
   { page: "sidebar", itemKey: "purchase-orders", label: "Sidebar — Supplier Orders link" },
   { page: "sidebar", itemKey: "quick-receive", label: "Sidebar — Quick Receive link" },
   { page: "sidebar", itemKey: "order-email-scan", label: "Sidebar — Order Email Scan link" },
-  { page: "sidebar", itemKey: "locations", label: "Sidebar — Locations link" },
   { page: "sidebar", itemKey: "utilities", label: "Sidebar — Utilities link" },
 ];
 

@@ -5,18 +5,28 @@ import { useFetch } from "../lib/useFetch";
 import type { Hint } from "../lib/types";
 import { InfoHint } from "../components/InfoHint";
 import { ToastHost } from "../components/ToastHost";
+import {
+  CatalogIcon,
+  DashboardIcon,
+  InventoryIcon,
+  MailIcon,
+  OrdersIcon,
+  ProductsIcon,
+  ReceiveIcon,
+  UtilitiesIcon,
+  VendorsIcon,
+} from "../components/NavIcons";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", end: true, hintKey: "dashboard" },
-  { to: "/products", label: "Products", hintKey: "products" },
-  { to: "/catalog-listings", label: "Catalog Listings", hintKey: "catalog-listings" },
-  { to: "/inventory", label: "Inventory Units", hintKey: "inventory" },
-  { to: "/vendors", label: "Vendors", hintKey: "vendors" },
-  { to: "/purchase-orders", label: "Supplier Orders", hintKey: "purchase-orders" },
-  { to: "/receiving/quick-receive", label: "Quick Receive", hintKey: "quick-receive" },
-  { to: "/order-email-scan", label: "Order Email Scan", hintKey: "order-email-scan" },
-  { to: "/locations", label: "Locations", hintKey: "locations" },
-  { to: "/utilities", label: "Utilities", hintKey: "utilities" },
+  { to: "/", label: "Dashboard", end: true, hintKey: "dashboard", icon: DashboardIcon },
+  { to: "/products", label: "Products", hintKey: "products", icon: ProductsIcon },
+  { to: "/catalog-listings", label: "Catalog Listings", hintKey: "catalog-listings", icon: CatalogIcon },
+  { to: "/inventory", label: "Inventory Units", hintKey: "inventory", icon: InventoryIcon },
+  { to: "/vendors", label: "Vendors", hintKey: "vendors", icon: VendorsIcon },
+  { to: "/purchase-orders", label: "Supplier Orders", hintKey: "purchase-orders", icon: OrdersIcon },
+  { to: "/receiving/quick-receive", label: "Quick Receive", hintKey: "quick-receive", icon: ReceiveIcon },
+  { to: "/order-email-scan", label: "Order Email Scan", hintKey: "order-email-scan", icon: MailIcon },
+  { to: "/utilities", label: "Utilities", hintKey: "utilities", icon: UtilitiesIcon },
 ];
 
 export function Layout() {
@@ -32,7 +42,12 @@ export function Layout() {
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end} className="nav-link">
               <span className="nav-link-label">
-                {item.label}
+                <span className="nav-link-main">
+                  <span className="nav-link-icon">
+                    <item.icon />
+                  </span>
+                  {item.label}
+                </span>
                 <InfoHint text={hintFor(item.hintKey)} />
               </span>
             </NavLink>

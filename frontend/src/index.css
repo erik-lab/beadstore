@@ -112,6 +112,29 @@ a {
   gap: 6px;
 }
 
+.nav-link-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.nav-link-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.nav-link-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.nav-link.active .nav-link-icon {
+  opacity: 1;
+}
+
 .nav-link.active {
   background: var(--accent);
   color: white;
