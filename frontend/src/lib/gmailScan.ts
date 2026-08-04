@@ -1,14 +1,21 @@
 // Prototype Gmail scanning for supplier order-confirmation emails.
 //
 // Runs entirely in the browser with Google Identity Services: the user grants
-// gmail.readonly in a popup, the access token lives only in this module's
-// memory for the current page visit, and nothing is stored — every scan
-// re-authorizes. Requires VITE_GOOGLE_CLIENT_ID (an OAuth Web client ID from
-// Google Cloud Console with this app's URL as an authorized JavaScript origin).
+// gmail.modify in a popup (read access, plus label/move access so a recorded
+// order's email can be filed away), the access token lives only in this
+// module's memory for the current page visit, and nothing is stored — every
+// scan re-authorizes. Requires VITE_GOOGLE_CLIENT_ID (an OAuth Web client ID
+// from Google Cloud Console with this app's URL as an authorized JavaScript
+// origin).
 
 const GSI_SRC = "https://accounts.google.com/gsi/client";
-const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
+
+// The label ("folder") a recorded order's email is moved into. Configurable
+// via VITE_GMAIL_ORDERS_LABEL until there's an in-app settings page for it.
+export const ORDERS_LABEL_NAME =
+  (import.meta.env.VITE_GMAIL_ORDERS_LABEL as string | undefined)?.trim() || "Bead Store Orders";
 
 // How far back to look, and how many matches of the broad search to inspect.
 const SEARCH_WINDOW = "newer_than:180d";
@@ -122,23 +129,50 @@ async function ensureToken(clientId: string): Promise<string> {
   return currentToken ?? requestAccessToken(clientId);
 }
 
-async function gmailGet(clientId: string, path: string): Promise<Record<string, unknown>> {
+class GmailApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function gmailRequest(
+  clientId: string,
+  path: string,
+  init: RequestInit = {}
+): Promise<Record<string, unknown>> {
   let token = await ensureToken(clientId);
-  let resp = await fetch(`${GMAIL_API}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const doFetch = (t: string) =>
+    fetch(`${GMAIL_API}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${t}`,
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...init.headers,
+      },
+    });
+
+  let resp = await doFetch(token);
   if (resp.status === 401) {
     // Token expired mid-session — re-authorize once and retry.
     currentToken = null;
     token = await requestAccessToken(clientId);
-    resp = await fetch(`${GMAIL_API}${path}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    resp = await doFetch(token);
   }
   if (!resp.ok) {
-    throw new Error(`Gmail request failed (${resp.status}). Try scanning again.`);
+    throw new GmailApiError(resp.status, `Gmail request failed (${resp.status}).`);
   }
+  if (resp.status === 204) return {};
   return resp.json();
+}
+
+async function gmailGet(clientId: string, path: string): Promise<Record<string, unknown>> {
+  return gmailRequest(clientId, path);
+}
+
+async function gmailPost(clientId: string, path: string, body: unknown): Promise<Record<string, unknown>> {
+  return gmailRequest(clientId, path, { method: "POST", body: JSON.stringify(body) });
 }
 
 function headerValue(headers: { name: string; value: string }[], name: string): string {
@@ -350,4 +384,64 @@ export async function fetchEmailDetail(clientId: string, messageId: string): Pro
     bodyText: (msg.payload ? extractBodyText(msg.payload) : "") || msg.snippet || "",
     attachments,
   };
+}
+
+export type MoveEmailResult =
+  | { moved: true }
+  | { moved: false; reason: "permission" | "error"; message: string };
+
+let cachedLabelId: string | null = null;
+
+async function findOrCreateLabel(clientId: string, labelName: string): Promise<string> {
+  if (cachedLabelId) return cachedLabelId;
+
+  const list = (await gmailGet(clientId, "/labels")) as { labels?: { id: string; name: string }[] };
+  const existing = (list.labels ?? []).find((l) => l.name === labelName);
+  if (existing) {
+    cachedLabelId = existing.id;
+    return existing.id;
+  }
+
+  const created = (await gmailPost(clientId, "/labels", {
+    name: labelName,
+    labelListVisibility: "labelShow",
+    messageListVisibility: "show",
+  })) as { id: string };
+  cachedLabelId = created.id;
+  return created.id;
+}
+
+/**
+ * Move a recorded order's email out of the inbox into the configured orders
+ * label ("folder"), creating the label if it doesn't exist yet. Gmail has no
+ * true folders — "move" means archive from Inbox + apply a label. Never
+ * throws: a missing gmail.modify grant or any other failure comes back as
+ * `{ moved: false }` so the caller can toast it and leave the email alone.
+ */
+export async function moveEmailToOrdersLabel(
+  clientId: string,
+  messageId: string,
+  labelName: string = ORDERS_LABEL_NAME
+): Promise<MoveEmailResult> {
+  try {
+    const labelId = await findOrCreateLabel(clientId, labelName);
+    await gmailPost(clientId, `/messages/${messageId}/modify`, {
+      addLabelIds: [labelId],
+      removeLabelIds: ["INBOX"],
+    });
+    return { moved: true };
+  } catch (err) {
+    if (err instanceof GmailApiError && (err.status === 403 || err.status === 401)) {
+      return {
+        moved: false,
+        reason: "permission",
+        message: `Gmail didn't grant permission to move this email into "${labelName}". The order was still recorded — grant the additional Gmail permission next time you scan if you'd like emails filed automatically.`,
+      };
+    }
+    return {
+      moved: false,
+      reason: "error",
+      message: `Could not move this email into "${labelName}" (it's still in your inbox). The order was recorded successfully.`,
+    };
+  }
 }

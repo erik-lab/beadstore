@@ -4,6 +4,7 @@ import { api } from "../lib/apiClient";
 import { useFetch } from "../lib/useFetch";
 import type { Hint } from "../lib/types";
 import { InfoHint } from "../components/InfoHint";
+import { ToastHost } from "../components/ToastHost";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", end: true, hintKey: "dashboard" },
@@ -47,6 +48,7 @@ export function Layout() {
       <main className="content">
         <Outlet />
       </main>
+      <ToastHost />
     </div>
   );
 }

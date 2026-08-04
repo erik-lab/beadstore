@@ -417,6 +417,66 @@ legend {
   text-align: left;
 }
 
+.toast-host {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 200;
+  max-width: 360px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.toast span {
+  flex: 1;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+.toast-info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.toast-success {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.toast-warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.toast-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

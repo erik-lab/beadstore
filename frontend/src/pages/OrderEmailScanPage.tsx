@@ -6,10 +6,13 @@ import type { PurchaseOrder, Vendor } from "../lib/types";
 import {
   scanGmailForOrderEmails,
   fetchEmailDetail,
+  moveEmailToOrdersLabel,
+  ORDERS_LABEL_NAME,
   type CandidateEmail,
   type EmailDetail,
 } from "../lib/gmailScan";
 import { parseOrderEmail } from "../lib/orderEmailParse";
+import { showToast } from "../lib/toastBus";
 
 const CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) ?? "";
 
@@ -110,6 +113,12 @@ export function OrderEmailScanPage() {
       });
 
       setRecordedIds((prev) => ({ ...prev, [email.id]: order.id }));
+
+      const moveResult = await moveEmailToOrdersLabel(CLIENT_ID, email.id);
+      if (!moveResult.moved) {
+        showToast(moveResult.message, moveResult.reason === "permission" ? "warn" : "error");
+      }
+
       navigate(`/purchase-orders/${order.id}`);
     } catch (err) {
       setError(
@@ -132,8 +141,10 @@ export function OrderEmailScanPage() {
         confirmations — from your known vendors or mentioning bead-related terms. Use View to read
         an email, or Record Order to turn it into a supplier order. Record Order uses AI to read
         the order details and item list from the email body and any attached invoice/receipt
-        (PDF or image) — review the created order and fix anything it misread. The Gmail
-        connection isn't remembered; you'll re-authorize each time you scan.
+        (PDF or image) — review the created order and fix anything it misread. Once recorded, the
+        email is moved out of your inbox into a Gmail label/folder called &ldquo;{ORDERS_LABEL_NAME}
+        &rdquo; (created automatically the first time). The Gmail connection isn't remembered; you'll
+        re-authorize each time you scan.
       </p>
 
       {!CLIENT_ID && (
