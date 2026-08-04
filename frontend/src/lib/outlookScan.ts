@@ -59,7 +59,7 @@ declare global {
   interface Window {
     msal?: {
       PublicClientApplication: new (config: {
-        auth: { clientId: string; authority: string };
+        auth: { clientId: string; authority: string; redirectUri: string };
       }) => MsalPublicClientApplication;
     };
   }
@@ -107,7 +107,16 @@ async function getPca(): Promise<MsalPublicClientApplication> {
       // connection only. Most Azure app registrations default to "single
       // tenant", which rejects /common's implied personal-account support
       // with "unauthorized_client ... not enabled for consumers".
-      auth: { clientId: CLIENT_ID, authority: "https://login.microsoftonline.com/organizations" },
+      //
+      // redirectUri is pinned to the app's root origin rather than left to
+      // MSAL's default (the current page URL) — otherwise the exact redirect
+      // URI sent varies by which page the user was on when they connected,
+      // and would need registering in Azure for every route instead of once.
+      auth: {
+        clientId: CLIENT_ID,
+        authority: "https://login.microsoftonline.com/organizations",
+        redirectUri: window.location.origin,
+      },
     });
     await pca.initialize();
   }
