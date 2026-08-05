@@ -146,28 +146,33 @@ def oauth_callback(
     try:
         tokens = service.exchange_code_for_tokens(code, redirect_uri)
         email_address = service.fetch_account_email(tokens["access_token"])
+
+        existing = (
+            db.query(EmailAccount)
+            .filter(EmailAccount.provider == provider_enum, EmailAccount.email_address == email_address)
+            .first()
+        )
+        encrypted = encrypt_token(tokens["refresh_token"])
+        if existing:
+            existing.refresh_token_encrypted = encrypted
+            existing.status = EmailAccountStatus.active
+        else:
+            db.add(
+                EmailAccount(
+                    provider=provider_enum,
+                    email_address=email_address,
+                    refresh_token_encrypted=encrypted,
+                    status=EmailAccountStatus.active,
+                )
+            )
+        db.commit()
     except HTTPException as exc:
         return _callback_page("Connection failed", str(exc.detail))
-
-    existing = (
-        db.query(EmailAccount)
-        .filter(EmailAccount.provider == provider_enum, EmailAccount.email_address == email_address)
-        .first()
-    )
-    encrypted = encrypt_token(tokens["refresh_token"])
-    if existing:
-        existing.refresh_token_encrypted = encrypted
-        existing.status = EmailAccountStatus.active
-    else:
-        db.add(
-            EmailAccount(
-                provider=provider_enum,
-                email_address=email_address,
-                refresh_token_encrypted=encrypted,
-                status=EmailAccountStatus.active,
-            )
-        )
-    db.commit()
+    except RuntimeError as exc:
+        # Most commonly TOKEN_ENCRYPTION_KEY missing/invalid on the server —
+        # surfaced here instead of a bare 500 so it's actionable from the
+        # popup itself rather than only in server logs.
+        return _callback_page("Server not configured", str(exc))
 
     return _callback_page("Connected", f"Connected {email_address}.")
 

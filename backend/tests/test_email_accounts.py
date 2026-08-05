@@ -86,6 +86,23 @@ def test_oauth_callback_rejects_state_for_wrong_provider(client):
     assert resp.status_code == 400
 
 
+def test_oauth_callback_surfaces_missing_encryption_key_instead_of_500(client, monkeypatch):
+    # Regression test: encrypt_token() used to be called outside the
+    # try/except in the callback handler, so a missing/invalid
+    # TOKEN_ENCRYPTION_KEY on the server crashed with a bare 500 instead of
+    # the callback's usual friendly error page.
+    monkeypatch.setattr(
+        gmail_service, "exchange_code_for_tokens", lambda code, redirect_uri: {"access_token": "at", "refresh_token": "rt"}
+    )
+    monkeypatch.setattr(gmail_service, "fetch_account_email", lambda access_token: "orders@example.com")
+    monkeypatch.setattr(settings, "token_encryption_key", "")
+
+    state = sign_oauth_state("gmail")
+    resp = client.get(f"/api/v1/email-accounts/gmail/callback?code=abc&state={state}")
+    assert resp.status_code == 200
+    assert "not configured" in resp.text.lower()
+
+
 def test_oauth_callback_handles_cancelled_consent(client):
     resp = client.get("/api/v1/email-accounts/gmail/callback?error=access_denied")
     assert resp.status_code == 200
