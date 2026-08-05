@@ -10,6 +10,7 @@ from app.routers import (
     auth,
     catalog_listings,
     dashboard,
+    email_accounts,
     hints,
     inventory_units,
     locations,
@@ -52,6 +53,7 @@ app.include_router(receiving.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(hints.router, prefix="/api/v1")
 app.include_router(order_email_parse.router, prefix="/api/v1")
+app.include_router(email_accounts.router, prefix="/api/v1")
 
 
 # Serve the built frontend from this same service, so one Render Web Service

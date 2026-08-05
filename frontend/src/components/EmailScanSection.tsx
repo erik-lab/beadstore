@@ -1,27 +1,25 @@
 import { Link } from "react-router-dom";
 import type { EmailScanState } from "../lib/useEmailScan";
 
-/** Renders the not-configured notice, results table, and email-view modal for one provider's scan. */
+/** Renders the results table and email-view modal for one account's scan. */
 export function EmailScanSection({ scan }: { scan: EmailScanState }) {
-  const { adapter, results, error, busyId, viewing, recordedIds, viewEmail, recordOrder, closeViewing } = scan;
+  const { account, results, error, busyId, viewing, recordedIds, viewEmail, recordOrder, closeViewing } = scan;
+  const providerLabel = account.provider === "gmail" ? "Gmail" : "Outlook";
 
   return (
     <div>
-      {!adapter.configured && <div className="alert alert-warn">{adapter.notConfiguredMessage}</div>}
-
       {error && <div className="alert alert-error">{error}</div>}
 
       {results && results.length === 0 && (
         <div className="alert alert-success">
-          {adapter.label} scan complete — no likely order-confirmation emails found in the last 6
-          months.
+          {providerLabel} scan complete — no likely order-confirmation emails found in the last 6 months.
         </div>
       )}
 
       {results && results.length > 0 && (
         <>
           <p className="page-subtitle">
-            {adapter.label}: found {results.length} candidate email{results.length === 1 ? "" : "s"}:
+            Found {results.length} candidate email{results.length === 1 ? "" : "s"}:
           </p>
           <table className="data-table">
             <thead>
@@ -36,7 +34,7 @@ export function EmailScanSection({ scan }: { scan: EmailScanState }) {
             <tbody>
               {results.map((email) => (
                 <tr key={email.id}>
-                  <td>{email.from}</td>
+                  <td>{email.from_address}</td>
                   <td>
                     {email.subject}
                     {email.snippet && (
@@ -47,7 +45,7 @@ export function EmailScanSection({ scan }: { scan: EmailScanState }) {
                     {email.date ? new Date(email.date).toLocaleDateString() : "—"}
                   </td>
                   <td>
-                    {email.matchReasons.map((reason) => (
+                    {email.match_reasons.map((reason) => (
                       <div key={reason} className="badge tone-info" style={{ marginRight: 4 }}>
                         {reason}
                       </div>
@@ -91,13 +89,13 @@ export function EmailScanSection({ scan }: { scan: EmailScanState }) {
             </div>
             <dl className="detail-grid">
               <dt>From</dt>
-              <dd>{viewing.from || "—"}</dd>
+              <dd>{viewing.from_address || "—"}</dd>
               <dt>To</dt>
-              <dd>{viewing.to || "—"}</dd>
+              <dd>{viewing.to_address || "—"}</dd>
               <dt>Date</dt>
               <dd>{viewing.date || "—"}</dd>
             </dl>
-            <div className="modal-body">{viewing.bodyText || "(no readable content)"}</div>
+            <div className="modal-body">{viewing.body_text || "(no readable content)"}</div>
           </div>
         </div>
       )}

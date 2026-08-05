@@ -90,3 +90,15 @@ class ImageStatus(str, enum.Enum):
     none = "none"
     pending = "pending"
     available = "available"
+
+
+class EmailProvider(str, enum.Enum):
+    gmail = "gmail"
+    outlook = "outlook"
+
+
+class EmailAccountStatus(str, enum.Enum):
+    active = "active"
+    # The stored refresh token was rejected on last use (revoked access,
+    # expired grant, password change, etc.) — needs the user to reconnect.
+    needs_reauth = "needs_reauth"

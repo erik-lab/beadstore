@@ -23,6 +23,18 @@ export interface Profile {
   theme: Theme;
 }
 
+export type EmailProvider = "gmail" | "outlook";
+export type EmailAccountStatus = "active" | "needs_reauth";
+
+export interface EmailAccount {
+  id: string;
+  provider: EmailProvider;
+  email_address: string;
+  label: string | null;
+  status: EmailAccountStatus;
+  created_at: string;
+}
+
 export type ActiveArchivedStatus = "active" | "archived";
 export type InventoryUnitStatus = "available" | "reserved" | "depleted" | "damaged" | "unresolved" | "archived";
 export type PurchaseOrderStatus = "draft" | "submitted" | "partially_received" | "received" | "closed" | "cancelled";

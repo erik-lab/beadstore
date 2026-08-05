@@ -139,10 +139,10 @@ function parseOrderLinesWithRegex(bodyText: string): ParsedOrderLine[] {
 
 function parseOrderEmailWithRegex(email: EmailDetail, vendors: Vendor[]): ParsedOrder {
   return {
-    vendorMatch: matchVendor(`${email.from} ${email.subject} ${email.bodyText.slice(0, 2000)}`, vendors),
-    suggestedVendorName: suggestVendorName(email.from),
+    vendorMatch: matchVendor(`${email.from_address} ${email.subject} ${email.body_text.slice(0, 2000)}`, vendors),
+    suggestedVendorName: suggestVendorName(email.from_address),
     orderDate: parseHeaderDate(email.date),
-    lines: parseOrderLinesWithRegex(email.bodyText),
+    lines: parseOrderLinesWithRegex(email.body_text),
     parsedByAi: false,
   };
 }
@@ -156,22 +156,22 @@ export async function parseOrderEmail(email: EmailDetail, vendors: Vendor[]): Pr
   try {
     const result = await api.post<AiParseResponse>("/order-email-parse", {
       subject: email.subject,
-      from_header: email.from,
+      from_header: email.from_address,
       date_header: email.date,
-      body_text: email.bodyText.slice(0, 50_000),
+      body_text: email.body_text.slice(0, 50_000),
       attachments: email.attachments.map((a) => ({
         filename: a.filename,
-        mime_type: a.mimeType,
-        data_base64: a.base64Data,
+        mime_type: a.mime_type,
+        data_base64: a.base64_data,
       })),
     });
 
-    const haystack = `${email.from} ${email.subject} ${result.vendor_name ?? ""}`;
+    const haystack = `${email.from_address} ${email.subject} ${result.vendor_name ?? ""}`;
     const vendorMatch = matchVendor(haystack, vendors);
 
     return {
       vendorMatch,
-      suggestedVendorName: result.vendor_name?.trim() || suggestVendorName(email.from),
+      suggestedVendorName: result.vendor_name?.trim() || suggestVendorName(email.from_address),
       orderDate: result.order_date || parseHeaderDate(email.date),
       lines: result.lines
         .filter((line) => line.description.trim().length > 0)

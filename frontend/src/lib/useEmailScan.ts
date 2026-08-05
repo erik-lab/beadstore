@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchAccountEmailDetail, moveAccountEmailToOrders, scanAccountForOrderEmails } from "./accountEmailScan";
 import { api, ApiError } from "./apiClient";
-import type { CandidateEmail, EmailDetail, EmailProviderAdapter } from "./emailScanTypes";
 import { loadScanState, saveScanState } from "./emailScanStore";
+import type { CandidateEmail, EmailDetail } from "./emailScanTypes";
 import { parseOrderEmail } from "./orderEmailParse";
 import { showToast } from "./toastBus";
-import type { PurchaseOrder, Vendor } from "./types";
+import type { EmailAccount, PurchaseOrder, Vendor } from "./types";
 
 export interface EmailScanState {
-  adapter: EmailProviderAdapter;
+  account: EmailAccount;
   scanning: boolean;
   results: CandidateEmail[] | null;
   error: string | null;
@@ -21,27 +22,28 @@ export interface EmailScanState {
   closeViewing: () => void;
 }
 
-/** All scan/view/record state and actions for one email provider adapter. */
-export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], reloadVendors: () => void): EmailScanState {
+function providerLabel(account: EmailAccount): string {
+  return account.provider === "gmail" ? "Gmail" : "Outlook";
+}
+
+/** All scan/view/record state and actions for one connected email account. */
+export function useEmailScan(account: EmailAccount, vendors: Vendor[], reloadVendors: () => void): EmailScanState {
   const navigate = useNavigate();
 
   const [scanning, setScanning] = useState(false);
-  const [results, setResults] = useState<CandidateEmail[] | null>(() => loadScanState(adapter.id).results);
+  const [results, setResults] = useState<CandidateEmail[] | null>(() => loadScanState(account.id).results);
   const [error, setError] = useState<string | null>(null);
 
   // Per-row busy state ("view" or "record" in flight) keyed by message id.
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<EmailDetail | null>(null);
-  const [recordedIds, setRecordedIds] = useState<Record<string, string>>(
-    () => loadScanState(adapter.id).recordedIds
-  );
+  const [recordedIds, setRecordedIds] = useState<Record<string, string>>(() => loadScanState(account.id).recordedIds);
 
-  // Kept in sessionStorage (not persisted across the scan/error/busy states,
-  // which are meaningless once you've navigated away) so leaving Order Email
-  // Scan and coming back still shows the same candidate list.
+  // Kept in sessionStorage so leaving Order Email Scan and coming back still
+  // shows the same candidate list for this account.
   useEffect(() => {
-    saveScanState(adapter.id, { results, recordedIds });
-  }, [adapter.id, results, recordedIds]);
+    saveScanState(account.id, { results, recordedIds });
+  }, [account.id, results, recordedIds]);
 
   async function runScan() {
     setError(null);
@@ -49,10 +51,14 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
     setResults(null);
     try {
       const vendorNames = vendors.map((v) => v.name);
-      const candidates = await adapter.scanForOrderEmails(vendorNames);
+      const candidates = await scanAccountForOrderEmails(account.id, vendorNames);
       setResults(candidates);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `The ${adapter.label} scan failed. Please try again.`);
+      setError(
+        err instanceof ApiError
+          ? String(err.detail)
+          : `The ${providerLabel(account)} scan failed. Please try again.`
+      );
     } finally {
       setScanning(false);
     }
@@ -62,9 +68,9 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
     setError(null);
     setBusyId(email.id);
     try {
-      setViewing(await adapter.fetchEmailDetail(email.id));
+      setViewing(await fetchAccountEmailDetail(account.id, email.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the email.");
+      setError(err instanceof ApiError ? String(err.detail) : "Could not load the email.");
     } finally {
       setBusyId(null);
     }
@@ -74,7 +80,7 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
     setError(null);
     setBusyId(email.id);
     try {
-      const detail = await adapter.fetchEmailDetail(email.id);
+      const detail = await fetchAccountEmailDetail(account.id, email.id);
       const parsed = await parseOrderEmail(detail, vendors);
 
       // Find or create the vendor.
@@ -87,7 +93,7 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
         } else {
           const created = await api.post<Vendor>("/vendors", {
             name,
-            notes: `Created automatically from an ${adapter.label} order email scan.`,
+            notes: `Created automatically from an ${providerLabel(account)} order email scan.`,
           });
           vendorId = created.id;
           reloadVendors();
@@ -116,7 +122,7 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
       const order = await api.post<PurchaseOrder>("/purchase-orders", {
         vendor_id: vendorId,
         order_date: parsed.orderDate,
-        notes: `Created from ${adapter.label} scan (parsed ${parsed.parsedByAi ? "by AI" : "with basic pattern matching"}).\nEmail: "${detail.subject}" from ${detail.from} on ${detail.date}.${
+        notes: `Created from ${providerLabel(account)} scan (parsed ${parsed.parsedByAi ? "by AI" : "with basic pattern matching"}).\nEmail: "${detail.subject}" from ${detail.from_address} on ${detail.date}.${
           parsed.lines.length === 0
             ? "\nNo line items could be read from the email — please edit the order lines."
             : ""
@@ -126,7 +132,7 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
 
       setRecordedIds((prev) => ({ ...prev, [email.id]: order.id }));
 
-      const moveResult = await adapter.moveEmailToOrdersFolder(email.id);
+      const moveResult = await moveAccountEmailToOrders(account.id, email.id);
       if (!moveResult.moved) {
         showToast(moveResult.message, moveResult.reason === "permission" ? "warn" : "error");
       }
@@ -146,7 +152,7 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
   }
 
   return {
-    adapter,
+    account,
     scanning,
     results,
     error,
