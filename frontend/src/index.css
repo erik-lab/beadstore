@@ -39,6 +39,41 @@
   }
 }
 
+/* Explicit theme overrides (Settings page) — win over the OS-driven media
+   query above regardless of direction, since an attribute selector on :root
+   is more specific than a bare :root inside @media. */
+:root[data-theme="dark"] {
+  --text: #d4d2d8;
+  --text-h: #f5f4f7;
+  --bg: #17151c;
+  --bg-panel: #201d27;
+  --border: #34313c;
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --danger-bg: #3a1f1d;
+  --success-bg: #10281f;
+  --warn-bg: #322610;
+  --info-bg: #16233b;
+  --muted-bg: #2a2733;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --text: #3f3b46;
+  --text-h: #16131c;
+  --bg: #faf9fb;
+  --bg-panel: #ffffff;
+  --border: #e2e0e6;
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --danger-bg: #fef3f2;
+  --success-bg: #ecfdf5;
+  --warn-bg: #fffaeb;
+  --info-bg: #eff8ff;
+  --muted-bg: #f2f1f4;
+  color-scheme: light;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -148,11 +183,35 @@ a {
   gap: 8px;
 }
 
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .user-email {
   font-size: 12px;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .content {

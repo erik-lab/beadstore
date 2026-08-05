@@ -105,3 +105,12 @@ export function UtilitiesIcon() {
     </svg>
   );
 }
+
+export function SettingsIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3v3.2M12 17.8V21M4.2 4.2l2.3 2.3M17.5 17.5l2.3 2.3M3 12h3.2M17.8 12H21M4.2 19.8l2.3-2.3M17.5 6.5l2.3-2.3" />
+    </svg>
+  );
+}

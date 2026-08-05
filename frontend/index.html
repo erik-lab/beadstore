@@ -15,6 +15,20 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Patti" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script>
+      // Applied before anything paints so a saved theme override doesn't
+      // flash the OS-default theme first, then swap once React mounts.
+      (function () {
+        try {
+          var theme = localStorage.getItem("patti-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+        } catch (e) {
+          // localStorage unavailable (private browsing, etc.) — falls back to OS theme.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

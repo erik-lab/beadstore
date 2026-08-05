@@ -18,6 +18,7 @@ export const HINT_LOCATIONS: HintLocation[] = [
   { page: "sidebar", itemKey: "quick-receive", label: "Sidebar — Quick Receive link" },
   { page: "sidebar", itemKey: "order-email-scan", label: "Sidebar — Order Email Scan link" },
   { page: "sidebar", itemKey: "utilities", label: "Sidebar — Utilities link" },
+  { page: "sidebar", itemKey: "settings", label: "Sidebar — Settings link" },
 ];
 
 export function findHintLocation(page: string, itemKey: string): HintLocation | undefined {

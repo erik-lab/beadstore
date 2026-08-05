@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "./apiClient";
 import type { CandidateEmail, EmailDetail, EmailProviderAdapter } from "./emailScanTypes";
+import { loadScanState, saveScanState } from "./emailScanStore";
 import { parseOrderEmail } from "./orderEmailParse";
 import { showToast } from "./toastBus";
 import type { PurchaseOrder, Vendor } from "./types";
@@ -25,13 +26,22 @@ export function useEmailScan(adapter: EmailProviderAdapter, vendors: Vendor[], r
   const navigate = useNavigate();
 
   const [scanning, setScanning] = useState(false);
-  const [results, setResults] = useState<CandidateEmail[] | null>(null);
+  const [results, setResults] = useState<CandidateEmail[] | null>(() => loadScanState(adapter.id).results);
   const [error, setError] = useState<string | null>(null);
 
   // Per-row busy state ("view" or "record" in flight) keyed by message id.
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<EmailDetail | null>(null);
-  const [recordedIds, setRecordedIds] = useState<Record<string, string>>({});
+  const [recordedIds, setRecordedIds] = useState<Record<string, string>>(
+    () => loadScanState(adapter.id).recordedIds
+  );
+
+  // Kept in sessionStorage (not persisted across the scan/error/busy states,
+  // which are meaningless once you've navigated away) so leaving Order Email
+  // Scan and coming back still shows the same candidate list.
+  useEffect(() => {
+    saveScanState(adapter.id, { results, recordedIds });
+  }, [adapter.id, results, recordedIds]);
 
   async function runScan() {
     setError(null);

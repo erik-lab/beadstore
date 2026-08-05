@@ -1,10 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useProfile } from "../auth/ProfileContext";
 import { api } from "../lib/apiClient";
 import { useFetch } from "../lib/useFetch";
 import type { Hint } from "../lib/types";
 import { InfoHint } from "../components/InfoHint";
 import { ToastHost } from "../components/ToastHost";
+import { Avatar } from "../components/Avatar";
 import {
   CatalogIcon,
   DashboardIcon,
@@ -13,6 +15,7 @@ import {
   OrdersIcon,
   ProductsIcon,
   ReceiveIcon,
+  SettingsIcon,
   UtilitiesIcon,
   VendorsIcon,
 } from "../components/NavIcons";
@@ -27,10 +30,12 @@ const NAV_ITEMS = [
   { to: "/receiving/quick-receive", label: "Quick Receive", hintKey: "quick-receive", icon: ReceiveIcon },
   { to: "/order-email-scan", label: "Order Email Scan", hintKey: "order-email-scan", icon: MailIcon },
   { to: "/utilities", label: "Utilities", hintKey: "utilities", icon: UtilitiesIcon },
+  { to: "/settings", label: "Settings", hintKey: "settings", icon: SettingsIcon },
 ];
 
 export function Layout() {
   const { session, signOut } = useAuth();
+  const { profile } = useProfile();
   const hints = useFetch(() => api.get<Hint[]>("/hints?page=sidebar"), []);
   const hintFor = (key: string) => hints.data?.find((h) => h.item_key === key)?.text;
 
@@ -54,7 +59,10 @@ export function Layout() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className="user-email">{session?.user.email}</div>
+          <div className="sidebar-account">
+            <Avatar avatarDataUrl={profile?.avatar_data_url} email={session?.user.email} />
+            <div className="user-email">{session?.user.email}</div>
+          </div>
           <button className="btn-secondary" onClick={() => signOut()}>
             Log out
           </button>

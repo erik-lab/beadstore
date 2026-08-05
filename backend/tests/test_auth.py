@@ -85,6 +85,65 @@ def test_asymmetric_jwt_verified_via_jwks(client, monkeypatch):
     assert resp.json()["email"] == "erik@example.com"
 
 
+def test_me_defaults_to_system_theme_and_no_avatar(client):
+    token = make_token(email="erik@example.com")
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["theme"] == "system"
+    assert body["avatar_data_url"] is None
+
+
+def test_patch_me_updates_theme_and_avatar(client):
+    token = make_token(email="erik@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    client.get("/api/v1/auth/me", headers=headers)  # create the profile first
+
+    resp = client.patch(
+        "/api/v1/auth/me",
+        headers=headers,
+        json={"theme": "dark", "avatar_data_url": "data:image/png;base64,abc123"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["theme"] == "dark"
+    assert body["avatar_data_url"] == "data:image/png;base64,abc123"
+
+    # Persisted, not just echoed back.
+    resp = client.get("/api/v1/auth/me", headers=headers)
+    assert resp.json()["theme"] == "dark"
+    assert resp.json()["avatar_data_url"] == "data:image/png;base64,abc123"
+
+
+def test_patch_me_partial_update_leaves_other_fields_alone(client):
+    token = make_token(email="erik@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    client.get("/api/v1/auth/me", headers=headers)
+    client.patch("/api/v1/auth/me", headers=headers, json={"theme": "light"})
+
+    resp = client.patch(
+        "/api/v1/auth/me", headers=headers, json={"avatar_data_url": "data:image/png;base64,zzz"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["theme"] == "light"
+    assert body["avatar_data_url"] == "data:image/png;base64,zzz"
+
+
+def test_patch_me_rejects_invalid_theme(client):
+    token = make_token(email="erik@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    client.get("/api/v1/auth/me", headers=headers)
+
+    resp = client.patch("/api/v1/auth/me", headers=headers, json={"theme": "solarized"})
+    assert resp.status_code == 422
+
+
+def test_patch_me_requires_auth(client):
+    resp = client.patch("/api/v1/auth/me", json={"theme": "dark"})
+    assert resp.status_code == 401
+
+
 def test_concurrent_first_login_does_not_500(client, monkeypatch):
     """Two requests racing to auto-create the same first-time profile (e.g. React
     firing duplicate requests on initial mount) must not surface as a crash — the

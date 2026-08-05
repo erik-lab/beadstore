@@ -13,6 +13,16 @@ export type UnitType =
   | "other"
   | "lot";
 
+export type Theme = "system" | "light" | "dark";
+
+export interface Profile {
+  id: string;
+  email: string;
+  display_name: string | null;
+  avatar_data_url: string | null;
+  theme: Theme;
+}
+
 export type ActiveArchivedStatus = "active" | "archived";
 export type InventoryUnitStatus = "available" | "reserved" | "depleted" | "damaged" | "unresolved" | "archived";
 export type PurchaseOrderStatus = "draft" | "submitted" | "partially_received" | "received" | "closed" | "cancelled";
