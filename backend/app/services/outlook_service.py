@@ -63,6 +63,22 @@ def build_authorize_url(redirect_uri: str, state: str) -> str:
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
+def _describe_token_error(resp: httpx.Response) -> str:
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {}
+    error = body.get("error")
+    # error_description is often a long multi-line block (AADSTS code,
+    # timestamp, trace/correlation IDs) — the AADSTS code at the start is
+    # the useful part, so keep just the first line.
+    description = (body.get("error_description") or "").split("\n", 1)[0]
+    detail = " ".join(part for part in (error, description) if part)
+    if detail:
+        return f"Microsoft rejected the sign-in: {detail}"
+    return f"Microsoft rejected the sign-in ({resp.status_code}). Please try connecting the account again."
+
+
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
     resp = httpx.post(
         TOKEN_URL,
@@ -77,10 +93,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
         timeout=15,
     )
     if not resp.is_success:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Microsoft rejected the sign-in. Please try connecting the account again.",
-        )
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=_describe_token_error(resp))
     data = resp.json()
     if "refresh_token" not in data:
         raise HTTPException(

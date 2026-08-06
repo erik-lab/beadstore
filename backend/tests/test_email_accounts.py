@@ -297,3 +297,28 @@ def test_outlook_connect_and_scan(client, monkeypatch, auth_headers):
     )
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_outlook_token_exchange_failure_surfaces_azure_error_detail(client, monkeypatch):
+    # Regression test: a rejected token exchange used to always show the
+    # same generic "Microsoft rejected the sign-in" message no matter what
+    # actually went wrong. Microsoft's token endpoint response carries the
+    # real reason (an AADSTS error code) — that must reach the user instead
+    # of being discarded.
+    class FakeResponse:
+        is_success = False
+        status_code = 401
+
+        def json(self):
+            return {
+                "error": "invalid_client",
+                "error_description": "AADSTS7000215: Invalid client secret provided.\nTrace ID: abc",
+            }
+
+    monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: FakeResponse())
+
+    state = sign_oauth_state("outlook")
+    resp = client.get(f"/api/v1/email-accounts/outlook/callback?code=abc&state={state}")
+    assert resp.status_code == 200
+    assert "AADSTS7000215" in resp.text
+    assert "Trace ID" not in resp.text
