@@ -13,20 +13,33 @@ export class ApiError extends Error {
   }
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
+async function authHeaders(forceRefresh: boolean): Promise<Record<string, string>> {
+  const { data } = forceRefresh ? await supabase.auth.refreshSession() : await supabase.auth.getSession();
   const token = data.session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function doFetch(path: string, options: RequestInit, forceRefresh: boolean): Promise<Response> {
   const headers = {
     "Content-Type": "application/json",
-    ...(await authHeaders()),
+    ...(await authHeaders(forceRefresh)),
     ...(options.headers ?? {}),
   };
+  return fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+}
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response = await doFetch(path, options, false);
+
+  // A 401 right after signing in can happen if this request's session read
+  // raced the sign-in handoff finishing (several components — dashboard,
+  // sidebar hints, profile — all fire their first request the instant
+  // `session` flips from null to signed-in). One retry with a forced token
+  // refresh clears that up instead of surfacing a confusing error the user
+  // then has to dismiss even though they're actually still signed in fine.
+  if (response.status === 401) {
+    response = await doFetch(path, options, true);
+  }
 
   if (!response.ok) {
     let detail: unknown = response.statusText;
