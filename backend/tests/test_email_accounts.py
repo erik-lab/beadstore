@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from cryptography.fernet import Fernet
 
@@ -75,15 +76,47 @@ def test_oauth_callback_creates_account(client, monkeypatch):
     assert "refresh_token_encrypted" not in accounts[0]
 
 
+def test_oauth_callback_reports_ok_true_on_success(client, monkeypatch):
+    resp = _connect_gmail_account(client, monkeypatch)
+    assert '"ok": true' in resp.text
+
+
+def test_oauth_callback_surfaces_provider_profile_fetch_failure(client, monkeypatch):
+    # Regression coverage for the real bug: fetch_account_email used to call
+    # resp.raise_for_status(), which raises an httpx error that nothing
+    # caught — an uncaught crash that either showed a bare 500 or, worse,
+    # could leave the opener with no idea the connection actually failed.
+    monkeypatch.setattr(
+        outlook_service, "exchange_code_for_tokens", lambda code, redirect_uri: {"access_token": "at", "refresh_token": "rt"}
+    )
+
+    class _FakeResponse:
+        is_success = False
+        status_code = 403
+
+    monkeypatch.setattr(httpx, "get", lambda *args, **kwargs: _FakeResponse())
+
+    state = sign_oauth_state("outlook")
+    resp = client.get(f"/api/v1/email-accounts/outlook/callback?code=abc&state={state}")
+    assert resp.status_code == 200
+    assert '"ok": false' in resp.text
+
+
 def test_oauth_callback_rejects_bad_state(client):
+    # Renders our own closing-popup page (200) rather than a raw error
+    # response, and reports failure via the postMessage payload (ok: false)
+    # so the opener window can surface it instead of assuming success.
     resp = client.get("/api/v1/email-accounts/gmail/callback?code=abc&state=garbage")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert '"ok": false' in resp.text
+    assert "expired" in resp.text.lower() or "invalid" in resp.text.lower()
 
 
 def test_oauth_callback_rejects_state_for_wrong_provider(client):
     state = sign_oauth_state("outlook")
     resp = client.get(f"/api/v1/email-accounts/gmail/callback?code=abc&state={state}")
-    assert resp.status_code == 400
+    assert resp.status_code == 200
+    assert '"ok": false' in resp.text
 
 
 def test_oauth_callback_surfaces_missing_encryption_key_instead_of_500(client, monkeypatch):

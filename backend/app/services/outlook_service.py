@@ -28,6 +28,11 @@ AUTH_URL = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/authorize"
 TOKEN_URL = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token"
 GRAPH_API = "https://graph.microsoft.com/v1.0"
 GRAPH_SCOPE = "https://graph.microsoft.com/Mail.ReadWrite"
+# User.Read is required for the /me call in fetch_account_email() below —
+# most new app registrations get it by default, but that's not guaranteed
+# (e.g. a registration that had its default permissions edited), so it's
+# requested explicitly rather than assumed.
+REQUEST_SCOPES = f"openid email offline_access https://graph.microsoft.com/User.Read {GRAPH_SCOPE}"
 
 SEARCH_WINDOW_DAYS = 180
 MAX_MESSAGES = 60
@@ -51,7 +56,7 @@ def build_authorize_url(redirect_uri: str, state: str) -> str:
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "response_mode": "query",
-        "scope": f"openid email offline_access {GRAPH_SCOPE}",
+        "scope": REQUEST_SCOPES,
         "prompt": "consent",
         "state": state,
     }
@@ -67,7 +72,7 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict:
             "client_secret": settings.microsoft_client_secret,
             "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
-            "scope": f"openid email offline_access {GRAPH_SCOPE}",
+            "scope": REQUEST_SCOPES,
         },
         timeout=15,
     )
@@ -93,7 +98,7 @@ def refresh_access_token(refresh_token: str) -> str:
             "client_id": settings.microsoft_client_id,
             "client_secret": settings.microsoft_client_secret,
             "grant_type": "refresh_token",
-            "scope": f"openid email offline_access {GRAPH_SCOPE}",
+            "scope": REQUEST_SCOPES,
         },
         timeout=15,
     )
@@ -106,9 +111,20 @@ def refresh_access_token(refresh_token: str) -> str:
 
 def fetch_account_email(access_token: str) -> str:
     resp = httpx.get(f"{GRAPH_API}/me", headers={"Authorization": f"Bearer {access_token}"}, timeout=15)
-    resp.raise_for_status()
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not read the Outlook account's own profile ({resp.status_code}). "
+            "Please try connecting the account again.",
+        )
     data = resp.json()
-    return data.get("mail") or data.get("userPrincipalName") or ""
+    email = data.get("mail") or data.get("userPrincipalName") or ""
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Microsoft didn't return an email address for this account.",
+        )
+    return email
 
 
 def _get(access_token: str, path: str) -> dict:

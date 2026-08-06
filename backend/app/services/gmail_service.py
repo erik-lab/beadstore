@@ -110,8 +110,19 @@ def refresh_access_token(refresh_token: str) -> str:
 
 def fetch_account_email(access_token: str) -> str:
     resp = httpx.get(USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}, timeout=15)
-    resp.raise_for_status()
-    return resp.json()["email"]
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not read the Gmail account's own profile ({resp.status_code}). "
+            "Please try connecting the account again.",
+        )
+    email = resp.json().get("email", "")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Google didn't return an email address for this account.",
+        )
+    return email
 
 
 def _get(access_token: str, path: str, params: dict | None = None) -> dict:

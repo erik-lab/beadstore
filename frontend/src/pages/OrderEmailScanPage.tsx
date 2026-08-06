@@ -58,7 +58,10 @@ export function OrderEmailScanPage() {
     setConnectError(null);
     setConnecting(provider);
     try {
-      await connectEmailAccount(provider);
+      const result = await connectEmailAccount(provider);
+      if (!result.ok && result.message !== "Sign-in was cancelled.") {
+        setConnectError(result.message || "Could not connect the account.");
+      }
       accounts.reload();
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : "Could not connect the account.");

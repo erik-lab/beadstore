@@ -8,6 +8,7 @@ it, and stores/updates the EmailAccount row. Every other endpoint here is
 authenticated and mints a fresh access token from the stored refresh token
 right before use — access tokens are never persisted.
 """
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -32,6 +33,7 @@ from app.services import gmail_service, outlook_service
 
 router = APIRouter(prefix="/email-accounts", tags=["email-accounts"])
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 _SERVICES = {EmailProvider.gmail: gmail_service, EmailProvider.outlook: outlook_service}
 _ORDERS_LABEL_SETTING = {
@@ -107,10 +109,15 @@ def get_connect_url(provider: str, request: Request):
     return ConnectUrlResponse(url=url)
 
 
-def _callback_page(status_label: str, message: str) -> HTMLResponse:
+def _callback_page(status_label: str, message: str, ok: bool) -> HTMLResponse:
     # Rendered inside the popup window itself (this is where the provider's
     # own redirect lands) — never part of the React app. Tells the opener
-    # window it can refresh its account list, then closes itself.
+    # window whether the connection actually succeeded (so it can show the
+    # error instead of just silently reloading an unchanged account list),
+    # then closes itself.
+    import json
+
+    payload = json.dumps({"source": "patti-email-account-connect", "ok": ok, "message": message})
     html = f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>{status_label}</title></head>
 <body style="font: 15px system-ui, sans-serif; padding: 32px; color: #16131c;">
@@ -118,7 +125,7 @@ def _callback_page(status_label: str, message: str) -> HTMLResponse:
 <p>You can close this window if it doesn't close automatically.</p>
 <script>
   if (window.opener) {{
-    window.opener.postMessage({{ source: "patti-email-account-connect" }}, window.location.origin);
+    window.opener.postMessage({payload}, window.location.origin);
   }}
   window.close();
 </script>
@@ -137,13 +144,15 @@ def oauth_callback(
 ):
     provider_enum = _provider(provider)
     if error or not code or not state:
-        return _callback_page("Sign-in cancelled", "Sign-in was cancelled or denied. You can close this window.")
+        return _callback_page(
+            "Sign-in cancelled", "Sign-in was cancelled or denied. You can close this window.", ok=False
+        )
 
-    verify_oauth_state(state, provider_enum.value)
     service = _SERVICES[provider_enum]
     redirect_uri = _redirect_uri(request, provider_enum)
 
     try:
+        verify_oauth_state(state, provider_enum.value)
         tokens = service.exchange_code_for_tokens(code, redirect_uri)
         email_address = service.fetch_account_email(tokens["access_token"])
 
@@ -167,14 +176,27 @@ def oauth_callback(
             )
         db.commit()
     except HTTPException as exc:
-        return _callback_page("Connection failed", str(exc.detail))
+        return _callback_page("Connection failed", str(exc.detail), ok=False)
     except RuntimeError as exc:
         # Most commonly TOKEN_ENCRYPTION_KEY missing/invalid on the server —
         # surfaced here instead of a bare 500 so it's actionable from the
         # popup itself rather than only in server logs.
-        return _callback_page("Server not configured", str(exc))
+        return _callback_page("Server not configured", str(exc), ok=False)
+    except Exception:
+        # Last-resort safety net: anything unexpected here previously
+        # crashed as a bare, unclosing "Internal Server Error" page — worse,
+        # if it happened between the two provider-API calls above, the popup
+        # could still auto-close via a stray earlier script tick without the
+        # opener ever finding out the connection actually failed. Always
+        # report failure explicitly instead.
+        logger.exception("Unexpected error in %s OAuth callback", provider_enum.value)
+        return _callback_page(
+            "Connection failed",
+            "Something went wrong connecting this account. Please try again, and let an administrator know if it keeps happening.",
+            ok=False,
+        )
 
-    return _callback_page("Connected", f"Connected {email_address}.")
+    return _callback_page("Connected", f"Connected {email_address}.", ok=True)
 
 
 @router.post("/{account_id}/scan", response_model=list[CandidateEmailOut], dependencies=[Depends(get_current_user)])
