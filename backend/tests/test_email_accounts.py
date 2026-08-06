@@ -142,6 +142,22 @@ def test_oauth_callback_handles_cancelled_consent(client):
     assert "cancelled" in resp.text.lower()
 
 
+def test_oauth_callback_does_not_auto_close_on_failure(client):
+    # Regression test: the callback popup used to call window.close()
+    # unconditionally, so even a specific, correct error message had no
+    # realistic chance of being read before the window vanished. Failures
+    # must leave the window open (no unconditional window.close() call) so
+    # whatever's wrong is actually visible.
+    resp = client.get("/api/v1/email-accounts/gmail/callback?code=abc&state=garbage")
+    assert "window.close();" not in resp.text
+    assert "Close window" in resp.text
+
+
+def test_oauth_callback_auto_closes_on_success(client, monkeypatch):
+    resp = _connect_gmail_account(client, monkeypatch)
+    assert "window.close();" in resp.text
+
+
 def test_oauth_callback_upserts_existing_account_by_email(client, monkeypatch, auth_headers):
     _connect_gmail_account(client, monkeypatch, email="orders@firemountaingems.com")
     _connect_gmail_account(client, monkeypatch, email="orders@firemountaingems.com")

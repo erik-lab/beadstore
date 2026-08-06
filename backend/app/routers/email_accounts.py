@@ -113,21 +113,32 @@ def _callback_page(status_label: str, message: str, ok: bool) -> HTMLResponse:
     # Rendered inside the popup window itself (this is where the provider's
     # own redirect lands) — never part of the React app. Tells the opener
     # window whether the connection actually succeeded (so it can show the
-    # error instead of just silently reloading an unchanged account list),
-    # then closes itself.
+    # error instead of just silently reloading an unchanged account list).
+    #
+    # Only auto-closes on success: a failure used to close itself instantly
+    # regardless, so even with a specific error message rendered right here,
+    # there was no realistic chance to read it before it vanished. On
+    # failure the window now stays open until manually closed, so whatever
+    # actually went wrong is visible (and reportable) instead of flashing by.
+    import html as html_lib
     import json
 
     payload = json.dumps({"source": "patti-email-account-connect", "ok": ok, "message": message})
+    safe_status = html_lib.escape(status_label)
+    safe_message = html_lib.escape(message)
+    close_script = "window.close();" if ok else ""
+    close_button = "" if ok else '<button onclick="window.close()">Close window</button>'
     html = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>{status_label}</title></head>
+<html><head><meta charset="utf-8"><title>{safe_status}</title></head>
 <body style="font: 15px system-ui, sans-serif; padding: 32px; color: #16131c;">
-<p>{message}</p>
-<p>You can close this window if it doesn't close automatically.</p>
+<h2>{safe_status}</h2>
+<p>{safe_message}</p>
+{close_button}
 <script>
   if (window.opener) {{
     window.opener.postMessage({payload}, window.location.origin);
   }}
-  window.close();
+  {close_script}
 </script>
 </body></html>"""
     return HTMLResponse(content=html)
