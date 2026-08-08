@@ -114,3 +114,12 @@ export function SettingsIcon() {
     </svg>
   );
 }
+
+export function PieceIcon() {
+  return (
+    <svg {...ICON_PROPS}>
+      <path d="M8 3h8l4 5-10 13L2 8z" />
+      <path d="M2 8h20M8 3l1.5 5L12 21l2.5-13L16 3M8 3 5 8M16 3l3 5" />
+    </svg>
+  );
+}

@@ -43,6 +43,9 @@ export type ReceivingStatus = "matched" | "overage" | "shortage" | "substitution
 export type CatalogListingStatus = "draft" | "ready" | "published" | "retired" | "archived";
 export type AvailableQuantityMode = "manual" | "derived_from_inventory" | "not_tracked";
 export type PublishReadiness = "missing_photos" | "needs_pricing" | "needs_description" | "ready";
+export type ProductSourceType = "purchased" | "assembled";
+export type PieceCostSource = "manual" | "estimated_from_components";
+export type PieceCreationStatus = "active" | "cancelled";
 
 export interface ProductCategory {
   id: string;
@@ -87,6 +90,7 @@ export interface Product {
   grade: string | null;
   condition: string | null;
   status: ActiveArchivedStatus;
+  source_type: ProductSourceType;
 }
 
 export interface CatalogListing {
@@ -128,6 +132,31 @@ export interface Location {
   description: string | null;
   parent_location_id: string | null;
   status: ActiveArchivedStatus;
+}
+
+export interface PieceComponent {
+  id: string;
+  inventory_unit_id: string;
+  product_name: string | null;
+  product_sku: string | null;
+  quantity_used: number;
+  unit_cost_at_use: number | null;
+}
+
+export interface PieceCreation {
+  id: string;
+  product_id: string;
+  product_name: string | null;
+  product_sku: string | null;
+  created_date: string;
+  quantity_produced: number;
+  creation_cost: number | null;
+  cost_source: PieceCostSource;
+  status: PieceCreationStatus;
+  resulting_inventory_unit_id: string | null;
+  notes: string | null;
+  components: PieceComponent[];
+  created_at: string;
 }
 
 export interface InventoryUnit {

@@ -29,6 +29,8 @@ import { InventoryOnHandPage } from "./pages/operations/InventoryOnHandPage";
 import { UnresolvedItemsPage } from "./pages/operations/UnresolvedItemsPage";
 import { DiscrepanciesPage } from "./pages/operations/DiscrepanciesPage";
 import { OrderEmailScanPage } from "./pages/OrderEmailScanPage";
+import { PieceCreationsListPage } from "./pages/pieces/PieceCreationsListPage";
+import { PieceCreationFormPage } from "./pages/pieces/PieceCreationFormPage";
 import { UtilitiesPage } from "./pages/utilities/UtilitiesPage";
 import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
 import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
@@ -82,6 +84,9 @@ function App() {
             <Route path="receiving/quick-receive" element={<QuickReceivePage />} />
 
             <Route path="order-email-scan" element={<OrderEmailScanPage />} />
+
+            <Route path="pieces" element={<PieceCreationsListPage />} />
+            <Route path="pieces/new" element={<PieceCreationFormPage />} />
 
             <Route path="operations/open-orders" element={<OpenOrdersPage />} />
             <Route path="operations/inventory-on-hand" element={<InventoryOnHandPage />} />

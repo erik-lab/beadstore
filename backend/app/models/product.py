@@ -4,7 +4,7 @@ from sqlalchemy import Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
-from app.models.enums import ActiveArchivedStatus, ImageStatus
+from app.models.enums import ActiveArchivedStatus, ImageStatus, ProductSourceType
 from app.models.mixins import AuditMixin, TimestampMixin, UUIDPKMixin
 from app.models.product_category import ProductCategory, ProductSubtype
 
@@ -43,6 +43,11 @@ class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     status: Mapped[ActiveArchivedStatus] = mapped_column(
         Enum(ActiveArchivedStatus, native_enum=False, length=20),
         default=ActiveArchivedStatus.active,
+        nullable=False,
+    )
+    source_type: Mapped[ProductSourceType] = mapped_column(
+        Enum(ProductSourceType, native_enum=False, length=20),
+        default=ProductSourceType.purchased,
         nullable=False,
     )
 

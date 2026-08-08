@@ -13,6 +13,7 @@ export const HINT_LOCATIONS: HintLocation[] = [
   { page: "sidebar", itemKey: "products", label: "Sidebar — Products link" },
   { page: "sidebar", itemKey: "catalog-listings", label: "Sidebar — Catalog Listings link" },
   { page: "sidebar", itemKey: "inventory", label: "Sidebar — Inventory Units link" },
+  { page: "sidebar", itemKey: "pieces", label: "Sidebar — Piece Creations link" },
   { page: "sidebar", itemKey: "vendors", label: "Sidebar — Vendors link" },
   { page: "sidebar", itemKey: "purchase-orders", label: "Sidebar — Supplier Orders link" },
   { page: "sidebar", itemKey: "quick-receive", label: "Sidebar — Quick Receive link" },

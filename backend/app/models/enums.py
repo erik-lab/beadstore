@@ -84,6 +84,7 @@ class InventoryAdjustmentType(str, enum.Enum):
     lost = "lost"
     count_correction = "count_correction"
     other = "other"
+    consumed_in_piece = "consumed_in_piece"
 
 
 class ImageStatus(str, enum.Enum):
@@ -102,3 +103,24 @@ class EmailAccountStatus(str, enum.Enum):
     # The stored refresh token was rejected on last use (revoked access,
     # expired grant, password change, etc.) — needs the user to reconnect.
     needs_reauth = "needs_reauth"
+
+
+class ProductSourceType(str, enum.Enum):
+    # How a product enters inventory in the first place: bought from a
+    # vendor (the default, existing behavior) vs. assembled in-house from
+    # other products via a PieceCreation. Purely for filtering/reporting —
+    # doesn't change how the product itself behaves once it exists. Named
+    # distinctly from Product.origin (that column is the free-text
+    # geographic/material origin attribute, e.g. "Czech Republic").
+    purchased = "purchased"
+    assembled = "assembled"
+
+
+class PieceCostSource(str, enum.Enum):
+    manual = "manual"
+    estimated_from_components = "estimated_from_components"
+
+
+class PieceCreationStatus(str, enum.Enum):
+    active = "active"
+    cancelled = "cancelled"

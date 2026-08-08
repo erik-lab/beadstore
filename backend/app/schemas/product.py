@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.models.enums import ActiveArchivedStatus, ImageStatus
+from app.models.enums import ActiveArchivedStatus, ImageStatus, ProductSourceType
 from app.schemas.common import ORMModel
 
 
@@ -32,6 +32,7 @@ class ProductCreate(ProductAttributes):
     image_url: str | None = None
     image_status: ImageStatus = ImageStatus.none
     media_notes: str | None = None
+    source_type: ProductSourceType = ProductSourceType.purchased
 
 
 class ProductUpdate(BaseModel):
@@ -57,6 +58,7 @@ class ProductUpdate(BaseModel):
     image_status: ImageStatus | None = None
     media_notes: str | None = None
     status: ActiveArchivedStatus | None = None
+    source_type: ProductSourceType | None = None
 
 
 class ProductRead(ORMModel):
@@ -85,5 +87,6 @@ class ProductRead(ORMModel):
     image_status: ImageStatus
     media_notes: str | None
     status: ActiveArchivedStatus
+    source_type: ProductSourceType
     created_at: datetime
     updated_at: datetime
