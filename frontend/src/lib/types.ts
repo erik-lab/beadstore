@@ -89,6 +89,10 @@ export interface Product {
   count: string | null;
   grade: string | null;
   condition: string | null;
+  manufacturing_method: string | null;
+  design_motif: string | null;
+  hole_configuration: string | null;
+  cut_style: string | null;
   status: ActiveArchivedStatus;
   source_type: ProductSourceType;
 }

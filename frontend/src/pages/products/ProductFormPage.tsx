@@ -18,6 +18,10 @@ const ATTRIBUTE_FIELDS: { key: keyof Product; label: string }[] = [
   { key: "count", label: "Count" },
   { key: "grade", label: "Grade" },
   { key: "condition", label: "Condition" },
+  { key: "manufacturing_method", label: "Manufacturing Method" },
+  { key: "design_motif", label: "Design Motif" },
+  { key: "hole_configuration", label: "Hole Configuration" },
+  { key: "cut_style", label: "Cut Style" },
 ];
 
 export function ProductFormPage() {

@@ -1,3 +1,4 @@
+from app.models.attribute_option import AttributeOption
 from app.models.catalog_listing import CatalogListing
 from app.models.email_account import EmailAccount
 from app.models.hint import Hint
@@ -14,6 +15,7 @@ from app.models.shop import Shop
 from app.models.vendor import Vendor
 
 __all__ = [
+    "AttributeOption",
     "CatalogListing",
     "EmailAccount",
     "Hint",

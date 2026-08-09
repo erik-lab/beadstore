@@ -19,6 +19,10 @@ class ProductAttributes(BaseModel):
     count: str | None = None
     grade: str | None = None
     condition: str | None = None
+    manufacturing_method: str | None = None
+    design_motif: str | None = None
+    hole_configuration: str | None = None
+    cut_style: str | None = None
     attributes_json: str | None = None
 
 
@@ -53,6 +57,10 @@ class ProductUpdate(BaseModel):
     count: str | None = None
     grade: str | None = None
     condition: str | None = None
+    manufacturing_method: str | None = None
+    design_motif: str | None = None
+    hole_configuration: str | None = None
+    cut_style: str | None = None
     attributes_json: str | None = None
     image_url: str | None = None
     image_status: ImageStatus | None = None
@@ -82,6 +90,10 @@ class ProductRead(ORMModel):
     count: str | None
     grade: str | None
     condition: str | None
+    manufacturing_method: str | None
+    design_motif: str | None
+    hole_configuration: str | None
+    cut_style: str | None
     attributes_json: str | None
     image_url: str | None
     image_status: ImageStatus

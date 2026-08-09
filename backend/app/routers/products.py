@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import get_current_user
+from app.models.attribute_option import AttributeOption
 from app.models.catalog_listing import CatalogListing
 from app.models.enums import ActiveArchivedStatus
 from app.models.inventory_unit import InventoryUnit
@@ -35,6 +36,10 @@ ATTRIBUTE_FIELDS: dict[str, Column] = {
     "count": Product.count,
     "grade": Product.grade,
     "condition": Product.condition,
+    "manufacturing_method": Product.manufacturing_method,
+    "design_motif": Product.design_motif,
+    "hole_configuration": Product.hole_configuration,
+    "cut_style": Product.cut_style,
 }
 
 
@@ -47,10 +52,12 @@ def get_attribute_options(db: Session = Depends(get_db), field: str = Query(...)
         db.query(column)
         .filter(column.isnot(None), column != "")
         .distinct()
-        .order_by(column)
         .all()
     )
-    return [value for (value,) in rows]
+    values = {value for (value,) in rows}
+    seeded = db.query(AttributeOption.value).filter(AttributeOption.field == field).all()
+    values.update(value for (value,) in seeded)
+    return sorted(values)
 
 
 @router.get("", response_model=list[ProductRead])

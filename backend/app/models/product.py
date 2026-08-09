@@ -32,6 +32,10 @@ class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     count: Mapped[str | None] = mapped_column(String(100), nullable=True)
     grade: Mapped[str | None] = mapped_column(String(100), nullable=True)
     condition: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    manufacturing_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    design_motif: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    hole_configuration: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    cut_style: Mapped[str | None] = mapped_column(String(100), nullable=True)
     attributes_json: Mapped[str | None] = mapped_column(String, nullable=True)
 
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

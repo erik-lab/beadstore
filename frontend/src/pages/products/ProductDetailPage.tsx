@@ -66,6 +66,14 @@ export function ProductDetailPage() {
           <dd>{p.grade ?? "—"}</dd>
           <dt>Condition</dt>
           <dd>{p.condition ?? "—"}</dd>
+          <dt>Manufacturing Method</dt>
+          <dd>{p.manufacturing_method ?? "—"}</dd>
+          <dt>Design Motif</dt>
+          <dd>{p.design_motif ?? "—"}</dd>
+          <dt>Hole Configuration</dt>
+          <dd>{p.hole_configuration ?? "—"}</dd>
+          <dt>Cut Style</dt>
+          <dd>{p.cut_style ?? "—"}</dd>
         </dl>
       </section>
 
