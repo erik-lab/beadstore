@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import InventoryAdjustmentType, InventoryUnitStatus, UnitType
 from app.schemas.common import ORMModel
@@ -10,11 +10,11 @@ from app.schemas.common import ORMModel
 class InventoryUnitCreate(BaseModel):
     product_id: uuid.UUID | None = None
     unresolved_description: str | None = None
-    quantity: float
+    quantity: float = Field(gt=0)
     unit_type: UnitType
     status: InventoryUnitStatus = InventoryUnitStatus.available
     received_date: date
-    cost_amount: float | None = None
+    cost_amount: float | None = Field(default=None, ge=0)
     cost_currency: str | None = None
     vendor_id: uuid.UUID | None = None
     location_id: uuid.UUID | None = None
@@ -30,11 +30,11 @@ class InventoryUnitCreate(BaseModel):
 class InventoryUnitUpdate(BaseModel):
     product_id: uuid.UUID | None = None
     unresolved_description: str | None = None
-    quantity: float | None = None
+    quantity: float | None = Field(default=None, ge=0)
     unit_type: UnitType | None = None
     status: InventoryUnitStatus | None = None
     received_date: date | None = None
-    cost_amount: float | None = None
+    cost_amount: float | None = Field(default=None, ge=0)
     cost_currency: str | None = None
     vendor_id: uuid.UUID | None = None
     location_id: uuid.UUID | None = None
@@ -69,3 +69,10 @@ class InventoryAdjustmentCreate(BaseModel):
     adjustment_type: InventoryAdjustmentType
     quantity_delta: float
     reason: str | None = None
+
+    @field_validator("quantity_delta")
+    @classmethod
+    def quantity_delta_nonzero(cls, value: float) -> float:
+        if value == 0:
+            raise ValueError("quantity_delta must not be zero — a zero adjustment is a no-op")
+        return value

@@ -1,24 +1,24 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import AvailableQuantityMode, CatalogListingStatus, PublishReadiness, UnitType
-from app.schemas.common import ORMModel
+from app.schemas.common import NonBlankStr, ORMModel
 
 
 class CatalogListingCreate(BaseModel):
     product_id: uuid.UUID
-    title: str
+    title: NonBlankStr
     short_description: str | None = None
     listing_description: str | None = None
-    price: float | None = None
+    price: float | None = Field(default=None, ge=0)
     status: CatalogListingStatus = CatalogListingStatus.draft
 
     sales_unit: UnitType | None = None
-    quantity_per_listing: float | None = None
+    quantity_per_listing: float | None = Field(default=None, ge=0)
     available_quantity_mode: AvailableQuantityMode = AvailableQuantityMode.not_tracked
-    manual_available_quantity: float | None = None
+    manual_available_quantity: float | None = Field(default=None, ge=0)
 
     category_override_id: uuid.UUID | None = None
     subtype_override: str | None = None
@@ -26,7 +26,7 @@ class CatalogListingCreate(BaseModel):
     collection_theme: str | None = None
 
     featured: bool = False
-    sort_order: int = 0
+    sort_order: int = Field(default=0, ge=0)
 
     seo_title: str | None = None
     seo_description: str | None = None
@@ -35,16 +35,16 @@ class CatalogListingCreate(BaseModel):
 
 
 class CatalogListingUpdate(BaseModel):
-    title: str | None = None
+    title: NonBlankStr | None = None
     short_description: str | None = None
     listing_description: str | None = None
-    price: float | None = None
+    price: float | None = Field(default=None, ge=0)
     status: CatalogListingStatus | None = None
 
     sales_unit: UnitType | None = None
-    quantity_per_listing: float | None = None
+    quantity_per_listing: float | None = Field(default=None, ge=0)
     available_quantity_mode: AvailableQuantityMode | None = None
-    manual_available_quantity: float | None = None
+    manual_available_quantity: float | None = Field(default=None, ge=0)
 
     category_override_id: uuid.UUID | None = None
     subtype_override: str | None = None
@@ -52,7 +52,7 @@ class CatalogListingUpdate(BaseModel):
     collection_theme: str | None = None
 
     featured: bool | None = None
-    sort_order: int | None = None
+    sort_order: int | None = Field(default=None, ge=0)
 
     seo_title: str | None = None
     seo_description: str | None = None

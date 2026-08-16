@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.models.enums import ActiveArchivedStatus, ImageStatus, ProductSourceType
-from app.schemas.common import ORMModel
+from app.schemas.common import NonBlankStr, ORMModel
 
 
 class ProductAttributes(BaseModel):
@@ -27,7 +27,7 @@ class ProductAttributes(BaseModel):
 
 
 class ProductCreate(ProductAttributes):
-    name: str
+    name: NonBlankStr
     category_id: uuid.UUID
     subtype_id: uuid.UUID | None = None
     custom_subtype: str | None = None
@@ -40,7 +40,7 @@ class ProductCreate(ProductAttributes):
 
 
 class ProductUpdate(BaseModel):
-    name: str | None = None
+    name: NonBlankStr | None = None
     category_id: uuid.UUID | None = None
     subtype_id: uuid.UUID | None = None
     custom_subtype: str | None = None

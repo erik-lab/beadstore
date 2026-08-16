@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import PurchaseOrderLineStatus, PurchaseOrderStatus, UnitType
 from app.schemas.common import ORMModel
@@ -10,9 +10,9 @@ from app.schemas.common import ORMModel
 class PurchaseOrderLineCreate(BaseModel):
     product_id: uuid.UUID | None = None
     expected_item_description: str | None = None
-    expected_quantity: float | None = None
+    expected_quantity: float | None = Field(default=None, gt=0)
     expected_unit_type: UnitType | None = None
-    unit_cost: float | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def require_product_or_description(self):
@@ -24,9 +24,9 @@ class PurchaseOrderLineCreate(BaseModel):
 class PurchaseOrderLineUpdate(BaseModel):
     product_id: uuid.UUID | None = None
     expected_item_description: str | None = None
-    expected_quantity: float | None = None
+    expected_quantity: float | None = Field(default=None, gt=0)
     expected_unit_type: UnitType | None = None
-    unit_cost: float | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
     status: PurchaseOrderLineStatus | None = None
 
 

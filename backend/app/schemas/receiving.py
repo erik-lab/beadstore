@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import ReceivingStatus, UnitType
 from app.schemas.common import ORMModel
@@ -11,9 +11,9 @@ class ReceiveLineInput(BaseModel):
     purchase_order_line_id: uuid.UUID | None = None
     product_id: uuid.UUID | None = None
     unresolved_item_description: str | None = None
-    received_quantity: float
+    received_quantity: float = Field(gt=0)
     received_unit_type: UnitType
-    unit_cost: float | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
     receiving_status: ReceivingStatus | None = None
     discrepancy_notes: str | None = None
     location_id: uuid.UUID | None = None
@@ -34,9 +34,9 @@ class ReceivePayload(BaseModel):
 class QuickReceiveLineInput(BaseModel):
     product_id: uuid.UUID | None = None
     unresolved_item_description: str | None = None
-    received_quantity: float
+    received_quantity: float = Field(gt=0)
     received_unit_type: UnitType
-    unit_cost: float | None = None
+    unit_cost: float | None = Field(default=None, ge=0)
     location_id: uuid.UUID | None = None
 
     @model_validator(mode="after")

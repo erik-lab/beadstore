@@ -4,17 +4,17 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.models.enums import ActiveArchivedStatus
-from app.schemas.common import ORMModel
+from app.schemas.common import NonBlankStr, ORMModel
 
 
 class LocationCreate(BaseModel):
-    name: str
+    name: NonBlankStr
     description: str | None = None
     parent_location_id: uuid.UUID | None = None
 
 
 class LocationUpdate(BaseModel):
-    name: str | None = None
+    name: NonBlankStr | None = None
     description: str | None = None
     parent_location_id: uuid.UUID | None = None
     status: ActiveArchivedStatus | None = None

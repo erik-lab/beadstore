@@ -101,6 +101,15 @@ def create_adjustment(unit_id: uuid.UUID, payload: InventoryAdjustmentCreate, db
     unit = db.get(InventoryUnit, unit_id)
     if unit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inventory unit not found")
+    new_quantity = float(unit.quantity) + payload.quantity_delta
+    if new_quantity < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This adjustment would take quantity below zero "
+                f"({unit.quantity} - {abs(payload.quantity_delta)} = {new_quantity})."
+            ),
+        )
     adjustment = InventoryAdjustment(
         inventory_unit_id=unit.id,
         adjustment_type=payload.adjustment_type,
@@ -108,7 +117,7 @@ def create_adjustment(unit_id: uuid.UUID, payload: InventoryAdjustmentCreate, db
         reason=payload.reason,
     )
     db.add(adjustment)
-    unit.quantity = float(unit.quantity) + payload.quantity_delta
+    unit.quantity = new_quantity
     db.commit()
     db.refresh(unit)
     return unit

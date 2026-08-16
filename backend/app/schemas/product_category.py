@@ -2,15 +2,15 @@ import uuid
 
 from pydantic import BaseModel
 
-from app.schemas.common import ORMModel
+from app.schemas.common import NonBlankStr, ORMModel
 
 
 class ProductCategoryCreate(BaseModel):
-    name: str
+    name: NonBlankStr
 
 
 class ProductCategoryUpdate(BaseModel):
-    name: str
+    name: NonBlankStr
 
 
 class ProductCategoryRead(ORMModel):
@@ -20,11 +20,11 @@ class ProductCategoryRead(ORMModel):
 
 class ProductSubtypeCreate(BaseModel):
     category_id: uuid.UUID
-    name: str
+    name: NonBlankStr
 
 
 class ProductSubtypeUpdate(BaseModel):
-    name: str
+    name: NonBlankStr
 
 
 class ProductSubtypeRead(ORMModel):

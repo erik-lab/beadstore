@@ -2,23 +2,23 @@ import uuid
 
 from pydantic import BaseModel
 
-from app.schemas.common import ORMModel
+from app.schemas.common import NonBlankStr, ORMModel
 
 
 class HintCreate(BaseModel):
-    page: str
-    item_key: str
-    text: str
+    page: NonBlankStr
+    item_key: NonBlankStr
+    text: NonBlankStr
 
 
 class HintUpdate(BaseModel):
-    page: str | None = None
-    item_key: str | None = None
-    text: str | None = None
+    page: NonBlankStr | None = None
+    item_key: NonBlankStr | None = None
+    text: NonBlankStr | None = None
 
 
 class HintUpsert(BaseModel):
-    text: str
+    text: NonBlankStr
 
 
 class HintRead(ORMModel):

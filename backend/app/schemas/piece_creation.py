@@ -18,7 +18,7 @@ class PieceCreationCreate(BaseModel):
     quantity_produced: float = Field(default=1, gt=0)
     # Always wins over the component-cost estimate when provided — Patti
     # can always just type a cost, whether or not components are linked.
-    creation_cost: float | None = None
+    creation_cost: float | None = Field(default=None, ge=0)
     notes: str | None = None
     components: list[PieceComponentInput] = Field(default_factory=list)
 
