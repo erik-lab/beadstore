@@ -16,6 +16,11 @@ const UTILITIES = [
     title: "Locations",
     description: "Manage storage locations used for inventory units.",
   },
+  {
+    to: "/utilities/audit-log",
+    title: "Audit Log",
+    description: "See every create, edit, and delete made in the app, and who made it.",
+  },
 ];
 
 export function UtilitiesPage() {

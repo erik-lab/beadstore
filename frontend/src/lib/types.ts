@@ -97,6 +97,26 @@ export interface Product {
   source_type: ProductSourceType;
 }
 
+export type AuditAction = "create" | "update" | "delete";
+
+export interface AuditLogEntry {
+  id: string;
+  table_name: string;
+  record_id: string;
+  action: AuditAction;
+  changes: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  created_at: string;
+}
+
+export interface AuditLogPage {
+  items: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface CatalogListing {
   id: string;
   product_id: string;

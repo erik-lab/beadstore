@@ -5,6 +5,11 @@ const TONE_BY_STATUS: Record<string, string> = {
   received: "tone-good",
   ready: "tone-good",
   published: "tone-good",
+  create: "tone-good",
+
+  update: "tone-info",
+
+  delete: "tone-bad",
 
   draft: "tone-neutral",
   expected: "tone-neutral",

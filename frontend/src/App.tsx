@@ -34,6 +34,7 @@ import { PieceCreationFormPage } from "./pages/pieces/PieceCreationFormPage";
 import { UtilitiesPage } from "./pages/utilities/UtilitiesPage";
 import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
 import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
+import { AuditLogPage } from "./pages/utilities/AuditLogPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function App() {
@@ -96,6 +97,7 @@ function App() {
             <Route path="utilities" element={<UtilitiesPage />} />
             <Route path="utilities/hints" element={<HintsMaintenancePage />} />
             <Route path="utilities/categories" element={<CategoryMaintenancePage />} />
+            <Route path="utilities/audit-log" element={<AuditLogPage />} />
 
             <Route path="settings" element={<SettingsPage />} />
 

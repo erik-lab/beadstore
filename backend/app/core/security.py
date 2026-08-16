@@ -101,4 +101,13 @@ def get_current_user(
         profile.email = email
         db.commit()
 
+    # Stamp this request's actor onto the session so the audit-trail flush
+    # listener (app/models/audit_log.py) can attribute any writes made
+    # later in this same request without threading a user param through
+    # every router. Safe because `db` is cached per-request by FastAPI's
+    # dependency injection — the same Session instance is handed to every
+    # dependent, including the route handler's own `db` parameter.
+    db.info["actor_id"] = user_uuid
+    db.info["actor_email"] = profile.email
+
     return CurrentUser(user_id=user_id, email=profile.email)

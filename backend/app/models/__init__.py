@@ -1,4 +1,5 @@
 from app.models.attribute_option import AttributeOption
+from app.models.audit_log import AuditLog
 from app.models.catalog_listing import CatalogListing
 from app.models.email_account import EmailAccount
 from app.models.hint import Hint
@@ -16,6 +17,7 @@ from app.models.vendor import Vendor
 
 __all__ = [
     "AttributeOption",
+    "AuditLog",
     "CatalogListing",
     "EmailAccount",
     "Hint",
