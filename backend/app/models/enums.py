@@ -85,6 +85,7 @@ class InventoryAdjustmentType(str, enum.Enum):
     count_correction = "count_correction"
     other = "other"
     consumed_in_piece = "consumed_in_piece"
+    sold = "sold"
 
 
 class ImageStatus(str, enum.Enum):
@@ -123,4 +124,30 @@ class PieceCostSource(str, enum.Enum):
 
 class PieceCreationStatus(str, enum.Enum):
     active = "active"
+    cancelled = "cancelled"
+
+
+class ApiClientKind(str, enum.Enum):
+    # Which "face" of the API this credential is for — see
+    # docs/design/api-tiers-work-plan.md. `internal` is unused today (staff
+    # auth is Supabase, not an API key) but reserved for a future
+    # machine-to-machine internal integration.
+    internal = "internal"
+    storefront = "storefront"
+    etsy = "etsy"
+
+
+class ApiClientStatus(str, enum.Enum):
+    active = "active"
+    revoked = "revoked"
+
+
+class SaleChannel(str, enum.Enum):
+    manual = "manual"
+    storefront = "storefront"
+    etsy = "etsy"
+
+
+class SaleStatus(str, enum.Enum):
+    recorded = "recorded"
     cancelled = "cancelled"

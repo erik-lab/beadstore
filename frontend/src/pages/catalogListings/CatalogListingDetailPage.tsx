@@ -42,7 +42,10 @@ export function CatalogListingDetailPage() {
           <dt>Available quantity</dt>
           <dd>
             {l.available_quantity_mode === "manual" && (l.manual_available_quantity ?? "—")}
-            {l.available_quantity_mode === "derived_from_inventory" && "Derived from inventory"}
+            {l.available_quantity_mode === "derived_from_inventory" &&
+              (l.derived_available_quantity != null
+                ? `${l.derived_available_quantity} (derived from inventory on hand)`
+                : "Derived from inventory")}
             {l.available_quantity_mode === "not_tracked" && "Not tracked"}
           </dd>
           <dt>Category override</dt>

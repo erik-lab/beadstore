@@ -1,3 +1,4 @@
+from app.models.api_client import ApiClient
 from app.models.attribute_option import AttributeOption
 from app.models.audit_log import AuditLog
 from app.models.catalog_listing import CatalogListing
@@ -12,10 +13,12 @@ from app.models.product_category import ProductCategory, ProductSubtype
 from app.models.profile import Profile
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine
 from app.models.receipt import Receipt, ReceiptLine
+from app.models.sale import Sale, SaleLine
 from app.models.shop import Shop
 from app.models.vendor import Vendor
 
 __all__ = [
+    "ApiClient",
     "AttributeOption",
     "AuditLog",
     "CatalogListing",
@@ -34,6 +37,8 @@ __all__ = [
     "PurchaseOrderLine",
     "Receipt",
     "ReceiptLine",
+    "Sale",
+    "SaleLine",
     "Shop",
     "Vendor",
 ]

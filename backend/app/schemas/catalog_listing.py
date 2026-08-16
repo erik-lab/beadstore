@@ -92,5 +92,10 @@ class CatalogListingRead(ORMModel):
     product_description: str | None = None
     product_sku: str | None = None
 
+    # Only populated when available_quantity_mode == derived_from_inventory
+    # — how many of this listing could be sold right now, computed from
+    # on-hand inventory. See services/catalog_service.py.
+    derived_available_quantity: int | None = None
+
     created_at: datetime
     updated_at: datetime

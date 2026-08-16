@@ -130,6 +130,7 @@ export interface CatalogListing {
   quantity_per_listing: number | null;
   available_quantity_mode: AvailableQuantityMode;
   manual_available_quantity: number | null;
+  derived_available_quantity?: number | null;
 
   category_override_id: string | null;
   category_override_name?: string | null;

@@ -7,6 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.routers import (
+    api_access,
+    api_clients,
     audit_log,
     auth,
     catalog_listings,
@@ -21,6 +23,7 @@ from app.routers import (
     products,
     purchase_orders,
     receiving,
+    sales,
     vendors,
 )
 
@@ -58,6 +61,9 @@ app.include_router(order_email_parse.router, prefix="/api/v1")
 app.include_router(email_accounts.router, prefix="/api/v1")
 app.include_router(piece_creations.router, prefix="/api/v1")
 app.include_router(audit_log.router, prefix="/api/v1")
+app.include_router(api_clients.router, prefix="/api/v1")
+app.include_router(api_access.router, prefix="/api/v1")
+app.include_router(sales.router, prefix="/api/v1")
 
 
 # Serve the built frontend from this same service, so one Render Web Service

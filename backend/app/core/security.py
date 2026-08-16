@@ -1,18 +1,23 @@
 import uuid
+from datetime import datetime, timezone
 
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.api_keys import hash_api_key
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.models.api_client import ApiClient
+from app.models.enums import ApiClientKind, ApiClientStatus
 from app.models.profile import Profile
 
 settings = get_settings()
 bearer_scheme = HTTPBearer(auto_error=False)
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # Supabase projects migrated to the newer "JWT Signing Keys" system issue
 # asymmetric-signed tokens (ES256/RS256), verified via the project's JWKS
@@ -111,3 +116,43 @@ def get_current_user(
     db.info["actor_email"] = profile.email
 
     return CurrentUser(user_id=user_id, email=profile.email)
+
+
+# --- Non-human API credentials (storefront app, Etsy integration) ---------
+# Parallel to CurrentUser/get_current_user above, but for callers that
+# aren't a Supabase-authenticated staff login — see
+# docs/design/api-tiers-work-plan.md. Not wired into any business router
+# yet; only the /api-clients/whoami diagnostic endpoint uses it so far.
+
+
+def get_api_client(
+    api_key: str | None = Depends(api_key_header),
+    db: Session = Depends(get_db),
+) -> ApiClient:
+    if api_key is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing X-API-Key header")
+
+    client = db.query(ApiClient).filter(ApiClient.api_key_hash == hash_api_key(api_key)).first()
+    if client is None or client.status != ApiClientStatus.active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+
+    client.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+    return client
+
+
+def require_api_client_kind(kind: ApiClientKind):
+    """Factory for scoping an endpoint to one face of the API, e.g.
+    Depends(require_api_client_kind(ApiClientKind.storefront)) so a storefront
+    key can't call an Etsy-only endpoint and vice versa.
+    """
+
+    def _check(client: ApiClient = Depends(get_api_client)) -> ApiClient:
+        if client.kind != kind:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This endpoint requires an API client of kind '{kind.value}'",
+            )
+        return client
+
+    return _check
