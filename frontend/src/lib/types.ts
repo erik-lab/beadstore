@@ -46,6 +46,34 @@ export type PublishReadiness = "missing_photos" | "needs_pricing" | "needs_descr
 export type ProductSourceType = "purchased" | "assembled";
 export type PieceCostSource = "manual" | "estimated_from_components";
 export type PieceCreationStatus = "active" | "cancelled";
+export type SaleChannel = "manual" | "storefront" | "etsy";
+export type SaleStatus = "recorded" | "cancelled";
+
+export interface SaleLine {
+  id: string;
+  sale_id: string;
+  catalog_listing_id: string | null;
+  product_id: string;
+  product_name?: string | null;
+  product_sku?: string | null;
+  quantity: number;
+  unit_price: number | null;
+}
+
+export interface Sale {
+  id: string;
+  channel: SaleChannel;
+  external_order_id: string | null;
+  sale_date: string;
+  status: SaleStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaleDetail extends Sale {
+  lines: SaleLine[];
+}
 
 export interface ProductCategory {
   id: string;

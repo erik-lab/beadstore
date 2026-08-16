@@ -35,6 +35,7 @@ import { UtilitiesPage } from "./pages/utilities/UtilitiesPage";
 import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
 import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
 import { AuditLogPage } from "./pages/utilities/AuditLogPage";
+import { RecordSalePage } from "./pages/utilities/RecordSalePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function App() {
@@ -98,6 +99,7 @@ function App() {
             <Route path="utilities/hints" element={<HintsMaintenancePage />} />
             <Route path="utilities/categories" element={<CategoryMaintenancePage />} />
             <Route path="utilities/audit-log" element={<AuditLogPage />} />
+            <Route path="utilities/record-sale" element={<RecordSalePage />} />
 
             <Route path="settings" element={<SettingsPage />} />
 

@@ -21,6 +21,11 @@ const UTILITIES = [
     title: "Audit Log",
     description: "See every create, edit, and delete made in the app, and who made it.",
   },
+  {
+    to: "/utilities/record-sale",
+    title: "Record a Sale",
+    description: "Testing tool: record a sale and see it decrement inventory. No frills.",
+  },
 ];
 
 export function UtilitiesPage() {
