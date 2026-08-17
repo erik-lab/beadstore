@@ -52,6 +52,15 @@ cd backend && ./.venv/bin/python -m scripts.seed
 cd backend && ./.venv/bin/python -m scripts.seed_attribute_picklists
 ```
 
+## Etsy integration (local, no real Etsy account needed)
+
+Set `ETSY_SIMULATOR_ENABLED=true` in `backend/.env` (see `.env.example`) to turn on the built-in
+fake Etsy server at `/etsy-simulator`, and `ETSY_API_BASE_URL` to point at it
+(`http://localhost:8123/etsy-simulator` for this project's port). Then Utilities → Etsy
+Integration works end-to-end — connect, push a listing, pull orders — against the simulator
+instead of the real Etsy API. Switch `ETSY_API_BASE_URL` to `https://openapi.etsy.com/v3` and
+turn the simulator off once there's a real Etsy Developer Portal app and shop to connect to.
+
 ## Deploy branch
 
 Working branch: `claude/new-app-development-plan-njjwt7`

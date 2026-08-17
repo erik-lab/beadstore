@@ -36,6 +36,7 @@ import { HintsMaintenancePage } from "./pages/utilities/HintsMaintenancePage";
 import { CategoryMaintenancePage } from "./pages/utilities/CategoryMaintenancePage";
 import { AuditLogPage } from "./pages/utilities/AuditLogPage";
 import { RecordSalePage } from "./pages/utilities/RecordSalePage";
+import { EtsyStatusPage } from "./pages/utilities/EtsyStatusPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function App() {
@@ -100,6 +101,7 @@ function App() {
             <Route path="utilities/categories" element={<CategoryMaintenancePage />} />
             <Route path="utilities/audit-log" element={<AuditLogPage />} />
             <Route path="utilities/record-sale" element={<RecordSalePage />} />
+            <Route path="utilities/etsy" element={<EtsyStatusPage />} />
 
             <Route path="settings" element={<SettingsPage />} />
 

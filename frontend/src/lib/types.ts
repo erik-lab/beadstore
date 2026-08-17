@@ -75,6 +75,34 @@ export interface SaleDetail extends Sale {
   lines: SaleLine[];
 }
 
+export type EtsyAccountStatus = "active" | "needs_reauth";
+export type EtsySyncStatus = "not_synced" | "pending" | "synced" | "error";
+
+export interface EtsyAccount {
+  id: string;
+  shop_id: string;
+  shop_name: string | null;
+  scopes: string;
+  status: EtsyAccountStatus;
+  created_at: string;
+}
+
+export interface EtsyListingSync {
+  id: string;
+  catalog_listing_id: string;
+  etsy_shop_id: string;
+  etsy_listing_id: string | null;
+  sync_status: EtsySyncStatus;
+  last_synced_at: string | null;
+  last_error: string | null;
+}
+
+export interface EtsyPullResult {
+  created: number;
+  skipped_unmapped: number;
+  skipped_duplicate: number;
+}
+
 export interface ProductCategory {
   id: string;
   name: string;

@@ -45,14 +45,19 @@ def _state_secret() -> bytes:
     return hashlib.sha256(f"email-oauth-state:{settings.token_encryption_key}".encode()).digest()
 
 
-def sign_oauth_state(provider: str) -> str:
-    payload = json.dumps({"provider": provider, "exp": time.time() + STATE_TTL_SECONDS}).encode()
+def sign_oauth_state(provider: str, extra: dict | None = None) -> str:
+    # `extra` rides along in the same signed payload rather than a second
+    # server-side store — used by Etsy's PKCE flow to carry the code_verifier
+    # from /connect through to /callback (nothing secret from the browser's
+    # own perspective, since it's the party that generated it; the signature
+    # just stops it being tampered with in transit).
+    payload = json.dumps({"provider": provider, "exp": time.time() + STATE_TTL_SECONDS, **(extra or {})}).encode()
     payload_b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     signature = hmac.new(_state_secret(), payload_b64.encode(), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{signature}"
 
 
-def verify_oauth_state(state: str, expected_provider: str) -> None:
+def verify_oauth_state(state: str, expected_provider: str) -> dict:
     try:
         payload_b64, signature = state.split(".", 1)
         expected_signature = hmac.new(_state_secret(), payload_b64.encode(), hashlib.sha256).hexdigest()
@@ -64,6 +69,7 @@ def verify_oauth_state(state: str, expected_provider: str) -> None:
             raise ValueError("provider mismatch")
         if payload.get("exp", 0) < time.time():
             raise ValueError("expired")
+        return payload
     except (ValueError, IndexError, json.JSONDecodeError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

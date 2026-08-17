@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     gmail_orders_label: str = "Bead Store Orders"
     outlook_orders_label: str = "Bead Store Orders"
 
+    # Etsy integration (see docs/design/api-tiers-work-plan.md Phase 3).
+    # etsy_api_base_url points at the real Etsy API in production; locally
+    # it's pointed at this same server's built-in simulator
+    # (etsy_simulator_enabled=true) so the integration code can be exercised
+    # without live Etsy credentials.
+    etsy_client_id: str = ""
+    etsy_client_secret: str = ""
+    etsy_api_base_url: str = "https://openapi.etsy.com/v3"
+    etsy_webhook_signing_secret: str = ""
+    etsy_simulator_enabled: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]

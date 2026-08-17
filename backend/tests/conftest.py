@@ -1,5 +1,14 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
+
+# Must happen before `from app.main import app` below — main.py reads this
+# setting once, at import time, to decide whether to mount the Etsy
+# simulator router at all. Mounting it for the whole test session is
+# harmless (it's dev/test-only infra, gated behind its own auth/PKCE checks
+# same as it would be in local dev) and is what lets tests exercise the
+# real Etsy integration code against it — see test_etsy.py.
+os.environ.setdefault("ETSY_SIMULATOR_ENABLED", "true")
 
 import jwt
 import pytest

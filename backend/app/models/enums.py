@@ -151,3 +151,15 @@ class SaleChannel(str, enum.Enum):
 class SaleStatus(str, enum.Enum):
     recorded = "recorded"
     cancelled = "cancelled"
+
+
+class EtsyAccountStatus(str, enum.Enum):
+    active = "active"
+    needs_reauth = "needs_reauth"
+
+
+class EtsySyncStatus(str, enum.Enum):
+    not_synced = "not_synced"
+    pending = "pending"
+    synced = "synced"
+    error = "error"

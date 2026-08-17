@@ -26,6 +26,11 @@ const UTILITIES = [
     title: "Record a Sale",
     description: "Testing tool: record a sale and see it decrement inventory. No frills.",
   },
+  {
+    to: "/utilities/etsy",
+    title: "Etsy Integration",
+    description: "Connect a shop, push a listing, pull orders. Points at the built-in simulator locally.",
+  },
 ];
 
 export function UtilitiesPage() {

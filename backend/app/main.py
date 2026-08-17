@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
+from app.etsy_simulator.router import router as etsy_simulator_router
 from app.routers import (
     api_access,
     api_clients,
@@ -14,6 +15,7 @@ from app.routers import (
     catalog_listings,
     dashboard,
     email_accounts,
+    etsy,
     hints,
     inventory_units,
     locations,
@@ -24,6 +26,7 @@ from app.routers import (
     purchase_orders,
     receiving,
     sales,
+    storefront,
     vendors,
 )
 
@@ -64,6 +67,13 @@ app.include_router(audit_log.router, prefix="/api/v1")
 app.include_router(api_clients.router, prefix="/api/v1")
 app.include_router(api_access.router, prefix="/api/v1")
 app.include_router(sales.router, prefix="/api/v1")
+app.include_router(storefront.router, prefix="/api/v1")
+app.include_router(etsy.router, prefix="/api/v1")
+
+if settings.etsy_simulator_enabled:
+    # Deliberately outside /api/v1 — this stands in for Etsy's own servers
+    # (a separate origin in reality), not a part of our API surface.
+    app.include_router(etsy_simulator_router, prefix="/etsy-simulator")
 
 
 # Serve the built frontend from this same service, so one Render Web Service
