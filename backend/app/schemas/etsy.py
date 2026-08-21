@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import EtsyAccountStatus, EtsySyncStatus
 from app.schemas.common import ORMModel
@@ -43,3 +43,9 @@ class EtsyPullResult(BaseModel):
     created: int
     skipped_unmapped: int
     skipped_duplicate: int
+
+
+class EtsySimulateSaleRequest(BaseModel):
+    catalog_listing_id: uuid.UUID
+    quantity: float = Field(default=1, gt=0)
+    price: float | None = Field(default=None, ge=0)

@@ -180,6 +180,53 @@ def test_pull_receipts_creates_sale_and_decrements_inventory(client, auth_header
     assert units[0]["quantity"] == 7
 
 
+def test_simulate_sale_lets_pull_find_a_real_order(client, auth_headers):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    client.post(
+        "/api/v1/inventory-units",
+        json={"product_id": product["id"], "quantity": 10, "unit_type": "strand", "received_date": str(datetime.date.today())},
+        headers=auth_headers,
+    )
+    listing = _create_listing(client, auth_headers, product["id"], price=12.5)
+    push = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push",
+        json={"taxonomy_id": 1, "shipping_profile_id": 1, "return_policy_id": 1, "who_made": "i_did", "when_made": "made_to_order"},
+        headers=auth_headers,
+    ).json()
+
+    resp = client.post(
+        "/api/v1/etsy/simulate-sale",
+        json={"catalog_listing_id": listing["id"], "quantity": 2},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+
+    pull = client.post("/api/v1/etsy/pull", headers=auth_headers)
+    assert pull.json() == {"created": 1, "skipped_unmapped": 0, "skipped_duplicate": 0}
+
+    units = client.get(f"/api/v1/products/{product['id']}/inventory-units", headers=auth_headers).json()
+    assert units[0]["quantity"] == 8
+
+
+def test_simulate_sale_requires_listing_to_be_pushed_first(client, auth_headers):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    resp = client.post(
+        "/api/v1/etsy/simulate-sale",
+        json={"catalog_listing_id": listing["id"], "quantity": 1},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+
+
+def test_simulate_sale_requires_staff_auth(client):
+    resp = client.post("/api/v1/etsy/simulate-sale", json={"catalog_listing_id": "00000000-0000-0000-0000-000000000000"})
+    assert resp.status_code == 401
+
+
 def test_webhook_rejects_bad_signature(client):
     resp = client.post(
         "/api/v1/etsy/webhook",

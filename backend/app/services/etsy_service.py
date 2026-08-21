@@ -167,3 +167,21 @@ def get_shop_receipts(shop_id: str, access_token: str, min_created: int | None =
     if not resp.is_success:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Etsy request failed ({resp.status_code}).")
     return resp.json()
+
+
+def simulate_sale(shop_id: str, listing_id: str, quantity: float, price: float | None) -> dict:
+    """Seeds a fake paid order in the simulator so a "Pull Orders Now" click
+    has something real to find -- see app/etsy_simulator's `/_simulator/seed-receipt`.
+    Only meaningful when `settings.etsy_api_base_url` points at our own
+    simulator; there is no such endpoint on the real Etsy API, so this
+    would simply fail against production (guarded in the router before it
+    gets here -- see routers/etsy.py).
+    """
+    resp = httpx.post(
+        f"{settings.etsy_api_base_url}/_simulator/seed-receipt",
+        json={"shop_id": shop_id, "listing_id": listing_id, "quantity": quantity, "price": price},
+        timeout=15,
+    )
+    if not resp.is_success:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="The simulator rejected the seed request.")
+    return resp.json()

@@ -33,6 +33,12 @@ export function EtsyStatusPage() {
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
 
+  const [simulateQuantity, setSimulateQuantity] = useState("1");
+  const [simulatePrice, setSimulatePrice] = useState("");
+  const [simulating, setSimulating] = useState(false);
+  const [simulateError, setSimulateError] = useState<string | null>(null);
+  const [simulateOk, setSimulateOk] = useState(false);
+
   async function handleConnect() {
     setConnecting(true);
     setConnectError(null);
@@ -92,6 +98,28 @@ export function EtsyStatusPage() {
     }
   }
 
+  async function handleSimulateSale() {
+    setSimulateError(null);
+    setSimulateOk(false);
+    if (!listingId) {
+      setSimulateError("Choose a listing above and push it to Etsy first.");
+      return;
+    }
+    setSimulating(true);
+    try {
+      await api.post("/etsy/simulate-sale", {
+        catalog_listing_id: listingId,
+        quantity: Number(simulateQuantity) || 1,
+        price: simulatePrice ? Number(simulatePrice) : null,
+      });
+      setSimulateOk(true);
+    } catch (err) {
+      setSimulateError(err instanceof ApiError ? String(err.detail) : "Could not simulate a sale.");
+    } finally {
+      setSimulating(false);
+    }
+  }
+
   const listingItems = listings.data ?? [];
 
   return (
@@ -142,21 +170,6 @@ export function EtsyStatusPage() {
       </section>
 
       <section className="detail-section">
-        <h2>Pull Orders</h2>
-        <p className="page-subtitle">Fetch paid Etsy orders and record them as sales, decrementing inventory.</p>
-        {pullError && <div className="alert alert-error">{pullError}</div>}
-        <button className="btn-primary" onClick={handlePull} disabled={pulling}>
-          {pulling ? "Pulling..." : "Pull Orders Now"}
-        </button>
-        {pullResult && (
-          <p className="page-subtitle" style={{ marginTop: 8 }}>
-            Created {pullResult.created}, skipped {pullResult.skipped_duplicate} already-recorded,{" "}
-            {pullResult.skipped_unmapped} unmapped to a pushed listing.
-          </p>
-        )}
-      </section>
-
-      <section className="detail-section">
         <h2>Push a Listing</h2>
         <p className="page-subtitle">
           Creates a draft listing on Etsy the first time, updates price/quantity on later pushes.
@@ -203,6 +216,56 @@ export function EtsyStatusPage() {
           <p className="page-subtitle" style={{ marginTop: 8 }}>
             Sync status: <StatusBadge status={pushResult.sync_status} /> — Etsy listing ID:{" "}
             {pushResult.etsy_listing_id ?? "—"}
+          </p>
+        )}
+      </section>
+
+      <section className="detail-section">
+        <h2>Simulate a Sale</h2>
+        <p className="page-subtitle">
+          Play button for the simulator — pretends someone bought the listing selected above (must
+          be pushed to Etsy first), so "Pull Orders Now" below has a real order to find. Only works
+          against the simulator; there's no such thing on the real Etsy API.
+        </p>
+        {simulateError && <div className="alert alert-error">{simulateError}</div>}
+        <div className="line-row">
+          <input
+            type="number"
+            step="1"
+            placeholder="Quantity"
+            value={simulateQuantity}
+            onChange={(e) => setSimulateQuantity(e.target.value)}
+          />
+          <input
+            type="number"
+            step="0.01"
+            placeholder="Price (optional, defaults to listing price)"
+            value={simulatePrice}
+            onChange={(e) => setSimulatePrice(e.target.value)}
+          />
+          <button className="btn-secondary" onClick={handleSimulateSale} disabled={simulating}>
+            {simulating ? "Simulating..." : "Simulate Sale on Etsy"}
+          </button>
+        </div>
+        {simulateOk && (
+          <p className="page-subtitle" style={{ marginTop: 8 }}>
+            Done — a fake paid order was created on the simulator. Click "Pull Orders Now" below to
+            bring it in.
+          </p>
+        )}
+      </section>
+
+      <section className="detail-section">
+        <h2>Pull Orders</h2>
+        <p className="page-subtitle">Fetch paid Etsy orders and record them as sales, decrementing inventory.</p>
+        {pullError && <div className="alert alert-error">{pullError}</div>}
+        <button className="btn-primary" onClick={handlePull} disabled={pulling}>
+          {pulling ? "Pulling..." : "Pull Orders Now"}
+        </button>
+        {pullResult && (
+          <p className="page-subtitle" style={{ marginTop: 8 }}>
+            Created {pullResult.created}, skipped {pullResult.skipped_duplicate} already-recorded,{" "}
+            {pullResult.skipped_unmapped} unmapped to a pushed listing.
           </p>
         )}
       </section>

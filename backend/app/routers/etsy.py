@@ -27,6 +27,7 @@ from app.schemas.etsy import (
     EtsyListingSyncRead,
     EtsyPullResult,
     EtsyPushRequest,
+    EtsySimulateSaleRequest,
 )
 from app.services import etsy_service, etsy_sync_service
 
@@ -161,6 +162,29 @@ def get_listing_sync(catalog_listing_id: uuid.UUID, db: Session = Depends(get_db
 @router.post("/pull", response_model=EtsyPullResult, dependencies=[Depends(get_current_user)])
 def pull_receipts(db: Session = Depends(get_db)):
     return etsy_sync_service.pull_receipts(db)
+
+
+@router.post("/simulate-sale", dependencies=[Depends(get_current_user)])
+def simulate_sale(payload: EtsySimulateSaleRequest, db: Session = Depends(get_db)):
+    # Play button for the simulator, not a real Etsy capability — there's no
+    # "make a fake sale happen" endpoint on the real API, so this only ever
+    # works when ETSY_SIMULATOR_ENABLED is on (which is exactly when a real
+    # shop isn't connected to anything that could be confused for one).
+    if not settings.etsy_simulator_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The Etsy simulator isn't enabled on this server, so there's nothing to simulate a sale against.",
+        )
+    sync_row = (
+        db.query(EtsyListingSync).filter(EtsyListingSync.catalog_listing_id == payload.catalog_listing_id).first()
+    )
+    if sync_row is None or sync_row.etsy_listing_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Push this listing to Etsy before simulating a sale for it.",
+        )
+    price = payload.price if payload.price is not None else float(sync_row.catalog_listing.price or 0)
+    return etsy_service.simulate_sale(sync_row.etsy_shop_id, sync_row.etsy_listing_id, payload.quantity, price)
 
 
 @router.post("/webhook", include_in_schema=False)
