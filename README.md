@@ -17,10 +17,13 @@ approved technical design this implementation follows.
 > installed into it — run the `pip install` step again rather than assuming activation alone did
 > something. See **Troubleshooting** below for the most common Windows pip failure (a certificate
 > error).
->
-> This project also runs on non-default ports (**8123** backend / **5193** frontend) rather than
-> the 8000/5173 shown below, to avoid clashing with other projects on the same machine — see
-> `docs/design/dev-cheat-sheet.md`. Substitute those ports wherever you see 8000/5173 here.
+
+This project runs on non-default ports — **8123** for the backend, **5193** for the frontend —
+rather than FastAPI's/Vite's own defaults (8000/5173), to avoid clashing with other projects on the
+same machine (see `docs/design/dev-cheat-sheet.md`). Both commands below already pass the right
+`--port`; if you ever start either without it, you'll get the wrong default and every request from
+the other side will fail with "Failed to fetch" (frontend pointed at a port nothing's listening on)
+or a CORS error (backend not expecting that origin) — see **Troubleshooting**.
 
 ### 1. Backend
 
@@ -32,10 +35,10 @@ cp .env.example .env   # edit values, see Environment Variables below
 ./.venv/bin/alembic upgrade head
 ./.venv/bin/python scripts/seed.py
 ./.venv/bin/python scripts/seed_attribute_picklists.py
-./.venv/bin/uvicorn app.main:app --reload --port 8000
+./.venv/bin/uvicorn app.main:app --reload --port 8123
 ```
 
-Backend runs at `http://localhost:8000`. Health check: `GET /health`.
+Backend runs at `http://localhost:8123`. Health check: `GET /health`.
 
 For quick local development without a Supabase Postgres instance, `DATABASE_URL` can be left as
 the SQLite default in `.env.example` (`sqlite:///./beadstore_dev.db`) — SQLAlchemy models avoid
@@ -48,11 +51,11 @@ anything beyond local iteration.
 cd frontend
 npm install
 cp .env.example .env   # edit values, see Environment Variables below
-npm run dev
+npm run dev -- --port 5193
 ```
 
-Frontend runs at `http://localhost:5173` and expects the backend at
-`VITE_API_BASE_URL` (default `http://localhost:8000/api/v1`).
+Frontend runs at `http://localhost:5193` and expects the backend at `VITE_API_BASE_URL`
+(`http://localhost:8123/api/v1` — already the `.env.example` default).
 
 ### Restarting after a reboot
 
@@ -62,11 +65,11 @@ and local SQLite DB all persist on disk. Just:
 ```bash
 # backend
 cd backend
-./.venv/bin/uvicorn app.main:app --reload --port 8000     # Scripts/ instead of bin/ on Windows
+./.venv/bin/uvicorn app.main:app --reload --port 8123     # Scripts/ instead of bin/ on Windows
 
 # frontend (separate terminal)
 cd frontend
-npm run dev
+npm run dev -- --port 5193
 ```
 
 If a command errors with "command not found" / "No such file or directory," that means the venv
@@ -117,13 +120,13 @@ safe to re-run and only installs what's missing/outdated.
 | `SUPABASE_JWT_SECRET` | Used to verify Supabase-issued JWTs (Project Settings → API → JWT Secret) |
 | `SUPABASE_JWT_AUDIENCE` | Expected JWT audience, normally `authenticated` |
 | `ALLOW_PUBLIC_SIGNUP` | Feature flag, keep `false` — accounts are created manually (see Supabase Setup) |
-| `CORS_ORIGINS` | Comma-separated allowed frontend origins |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins, e.g. `http://localhost:5193` for local dev |
 
 ### Frontend (`frontend/.env`)
 
 | Variable | Purpose |
 |---|---|
-| `VITE_API_BASE_URL` | Backend API base URL, e.g. `http://localhost:8000/api/v1` |
+| `VITE_API_BASE_URL` | Backend API base URL — `http://localhost:8123/api/v1` for local dev |
 | `VITE_SUPABASE_URL` | Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key (safe to expose to the browser) |
 
