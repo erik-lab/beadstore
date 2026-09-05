@@ -10,6 +10,18 @@ approved technical design this implementation follows.
 
 ## Local Setup
 
+> **Windows (Git Bash) users:** a venv's executables live in `.venv/Scripts/` on Windows, not
+> `.venv/bin/` (that's the Linux/Mac layout) — swap `bin` for `Scripts` in every `./.venv/bin/...`
+> command anywhere in this README, not just this section. If a command run through an *activated*
+> venv (prompt shows `(.venv)`) still says "command not found," the package was never actually
+> installed into it — run the `pip install` step again rather than assuming activation alone did
+> something. See **Troubleshooting** below for the most common Windows pip failure (a certificate
+> error).
+>
+> This project also runs on non-default ports (**8123** backend / **5193** frontend) rather than
+> the 8000/5173 shown below, to avoid clashing with other projects on the same machine — see
+> `docs/design/dev-cheat-sheet.md`. Substitute those ports wherever you see 8000/5173 here.
+
 ### 1. Backend
 
 ```bash
@@ -19,6 +31,7 @@ python3 -m venv .venv
 cp .env.example .env   # edit values, see Environment Variables below
 ./.venv/bin/alembic upgrade head
 ./.venv/bin/python scripts/seed.py
+./.venv/bin/python scripts/seed_attribute_picklists.py
 ./.venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
@@ -40,6 +53,56 @@ npm run dev
 
 Frontend runs at `http://localhost:5173` and expects the backend at
 `VITE_API_BASE_URL` (default `http://localhost:8000/api/v1`).
+
+### Restarting after a reboot
+
+Nothing here needs redoing from scratch after a restart — the venv, `node_modules`, `.env` files,
+and local SQLite DB all persist on disk. Just:
+
+```bash
+# backend
+cd backend
+./.venv/bin/uvicorn app.main:app --reload --port 8000     # Scripts/ instead of bin/ on Windows
+
+# frontend (separate terminal)
+cd frontend
+npm run dev
+```
+
+If a command errors with "command not found" / "No such file or directory," that means the venv
+itself is missing or incomplete (e.g. it was deleted, or `pip install` never fully completed last
+time) — rerun the full Backend setup above, starting from `pip install -r requirements.txt`. This
+does not touch `.env` or the database, only the `.venv` folder's installed packages.
+
+## Troubleshooting
+
+**`pip install` fails with `SSL: CERTIFICATE_VERIFY_FAILED` / "unable to get local issuer
+certificate"** — this is a local machine/network issue, not a repo problem. Almost always caused by
+a corporate VPN, antivirus, or firewall product doing "HTTPS scanning" (Zscaler, Netskope, some
+antivirus web-protection features) that intercepts the connection with its own certificate, which
+Python's bundled trust store (`certifi`) doesn't know about. Fastest unblock:
+
+```bash
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+```
+
+This only relaxes certificate checking for those two PyPI hosts, for this one install — it doesn't
+change how the app itself talks to Supabase/Etsy/anything else. If you'd rather fix the actual
+trust issue instead of working around it, the usual culprit is the machine's intercepting root CA
+not being in `certifi`'s bundle — ask whoever manages the machine's antivirus/VPN software for its
+root certificate, or look into the `pip-system-certs` package (which makes Python trust the OS
+certificate store instead of its own bundled one).
+
+**`./.venv/bin/<something>: No such file or directory` on Windows** — the venv layout is
+`.venv/Scripts/` on Windows, not `.venv/bin/`. Use `./.venv/Scripts/alembic`,
+`./.venv/Scripts/python`, `./.venv/Scripts/uvicorn`, etc. instead. If the venv is *activated*
+(prompt shows `(.venv)`) you can also drop the path entirely and just run `alembic`, `python`,
+`uvicorn` — activation puts `Scripts/` on `PATH` for you.
+
+**A previously-activated venv's commands aren't found even though `(.venv)` shows in the
+prompt** — activation succeeded but the package itself was never installed (or the venv predates
+`requirements.txt` gaining a new dependency). Run `pip install -r requirements.txt` again; it's
+safe to re-run and only installs what's missing/outdated.
 
 ## Environment Variables
 
@@ -97,11 +160,19 @@ cd backend
 ```bash
 cd backend
 ./.venv/bin/python scripts/seed.py
+./.venv/bin/python scripts/seed_attribute_picklists.py
 ```
 
-Seeds: product categories (Beads, Findings) with example subtypes, a system "Unknown Vendor"
-record (used when a supplier order's vendor isn't known), one demo vendor, one demo location, and
-one demo product with an inventory unit. Safe to re-run — it's idempotent.
+`seed.py` seeds: product categories (Beads, Findings) with example subtypes, a system "Unknown
+Vendor" record (used when a supplier order's vendor isn't known), one demo vendor, one demo
+location, and one demo product with an inventory unit.
+
+`seed_attribute_picklists.py` seeds ~350 pick-list values (material, color, size, shape, finish,
+manufacturing method, design motif, hole configuration, cut style) and additional
+categories/subtypes, sourced from a taxonomy survey of other bead stores — so pick-list dropdowns
+have useful suggestions before real inventory exists.
+
+Both are safe to re-run — idempotent.
 
 ## Tests
 
@@ -112,11 +183,15 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-34 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+152 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
-receiving with no prior order, and required-field validation across the API.
+receiving with no prior order, required-field/numeric-bounds validation across the API, the audit
+log's automatic create/update/delete capture, sales recording (FIFO inventory consumption,
+insufficient-stock rejection), the storefront-facing API (auth scoping, published-only visibility,
+price-tampering resistance), and the Etsy integration (OAuth/PKCE handshake, push/pull sync,
+webhook signature verification) driven against the built-in Etsy simulator rather than mocked.
 
 ### Frontend
 
