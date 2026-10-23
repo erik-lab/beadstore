@@ -3,8 +3,10 @@ import { ApiError } from "../../lib/apiClient";
 import { skipIntakeRow, updateIntakeRow } from "../../lib/inventoryIntake";
 import {
   INTAKE_FIELD_LABELS,
+  INTAKE_MATCH_DISPLAY,
   PRODUCT_ATTRIBUTE_FIELDS,
   UNIT_TYPES,
+  type IntakeNameMatch,
   type IntakeRow,
 } from "../../lib/types";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -60,6 +62,32 @@ const GAP_FIELD: Partial<Record<keyof Draft, string>> = {
   unit_type: "unit_type",
   received_date: "received_date",
 };
+
+/**
+ * Says whether a name is already on file or would be created.
+ *
+ * The batch-level "will create" list says a new vendor would appear; this
+ * says which row to look at. Hovering gives the full explanation, so the
+ * badge itself can stay to two or three words.
+ */
+function MatchBadge({ verdict }: { verdict: IntakeNameMatch | undefined }) {
+  if (!verdict) return null;
+  const display = INTAKE_MATCH_DISPLAY[verdict];
+  return (
+    <span className={`badge ${display.tone}`} style={{ marginLeft: 6 }} title={display.title}>
+      {display.label}
+    </span>
+  );
+}
+
+function fieldClasses(isMissing: boolean, verdict: IntakeNameMatch | undefined): string | undefined {
+  const classes = [
+    isMissing && "field-needed",
+    verdict === "new" && "field-new",
+    verdict === "ambiguous" && "field-ambiguous",
+  ].filter(Boolean);
+  return classes.length > 0 ? classes.join(" ") : undefined;
+}
 
 const CONFIDENCE_NOTE: Record<IntakeRow["confidence"], string | null> = {
   high: null,
@@ -154,10 +182,12 @@ export function IntakeRowCard({
 
   function field(label: string, name: keyof Draft, extra?: { type?: string; step?: string }) {
     const isMissing = GAP_FIELD[name] ? missing.has(GAP_FIELD[name]!) : false;
+    const verdict = row.name_matches[name];
     return (
-      <label className={isMissing ? "field-needed" : undefined}>
+      <label className={fieldClasses(isMissing, verdict)}>
         {label}
         {isMissing && <span className="badge tone-warn" style={{ marginLeft: 6 }}>needed</span>}
+        <MatchBadge verdict={verdict} />
         <input
           type={extra?.type ?? "text"}
           step={extra?.step}
@@ -212,11 +242,12 @@ export function IntakeRowCard({
 
       <div className="line-row">
         {field("Item name", "product_name")}
-        <label className={missing.has("category_name") ? "field-needed" : undefined}>
+        <label className={fieldClasses(missing.has("category_name"), row.name_matches.category_name)}>
           Category
           {missing.has("category_name") && (
             <span className="badge tone-warn" style={{ marginLeft: 6 }}>needed</span>
           )}
+          <MatchBadge verdict={row.name_matches.category_name} />
           <input
             list={`intake-categories-${row.id}`}
             value={draft.category_name}

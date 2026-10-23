@@ -41,7 +41,17 @@ router = APIRouter(
 def _batch_detail(db: Session, batch) -> IntakeBatchDetail:
     detail = IntakeBatchDetail.model_validate(batch)
     detail.will_create = NamesToCreate(**intake_service.names_to_be_created(db, batch))
+    # Resolved for the whole batch in one pass rather than per row.
+    verdicts = intake_service.resolve_name_matches(db, batch.rows)
+    for row in detail.rows:
+        row.name_matches = verdicts.get(row.id, {})
     return detail
+
+
+def _row_read(db: Session, row) -> IntakeRowRead:
+    read = IntakeRowRead.model_validate(row)
+    read.name_matches = intake_service.resolve_name_matches(db, [row]).get(row.id, {})
+    return read
 
 
 @router.post("/parse-text", response_model=IntakeBatchDetail, status_code=status.HTTP_201_CREATED)
@@ -145,10 +155,10 @@ def update_row(row_id: uuid.UUID, payload: IntakeRowUpdate, db: Session = Depend
     if "attributes" in changes:
         attributes = changes.pop("attributes")
         changes["attributes_json"] = json.dumps(attributes) if attributes else None
-    return intake_service.update_row(db, row_id, changes)
+    return _row_read(db, intake_service.update_row(db, row_id, changes))
 
 
 @router.post("/rows/{row_id}/skip", response_model=IntakeRowRead)
 def skip_row(row_id: uuid.UUID, payload: IntakeRowSkip, db: Session = Depends(get_db)):
     """Exclude a row from the commit (or put it back)."""
-    return intake_service.set_row_skipped(db, row_id, payload.skipped)
+    return _row_read(db, intake_service.set_row_skipped(db, row_id, payload.skipped))

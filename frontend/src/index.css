@@ -710,6 +710,17 @@ legend {
   outline-offset: 1px;
 }
 
+/* An imported name that doesn't line up with existing master data. Colored
+   rather than outlined: it isn't an error (creating a new vendor is often
+   exactly right), just something to look at before committing. */
+.field-new input {
+  color: var(--warn);
+}
+
+.field-ambiguous input {
+  color: var(--danger);
+}
+
 .state {
   padding: 24px;
   text-align: center;

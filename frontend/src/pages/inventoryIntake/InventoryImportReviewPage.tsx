@@ -319,6 +319,14 @@ export function InventoryImportReviewPage() {
 
       <section className="detail-section">
         <h2>Items found ({batch.rows.length})</h2>
+        <p className="page-subtitle">
+          Names are checked against what you already have.{" "}
+          <span className="badge tone-muted">on file</span> matches something existing;{" "}
+          <span className="badge tone-warn">new</span> would be created, so check it isn't a
+          misspelling of something you have — correct it here and the badge changes;{" "}
+          <span className="badge tone-bad">matches more than one</span> needs a more specific name
+          or a different category before it can be tied to a product.
+        </p>
         {batch.rows.length === 0 && (
           <EmptyState label="The reader didn't find any inventory items in this source. Try a clearer source, or add the items by hand." />
         )}

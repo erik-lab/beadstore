@@ -381,6 +381,31 @@ export type IntakeSourceKind = "paste" | "spreadsheet" | "document" | "voice";
 export type IntakeBatchStatus = "draft" | "committed" | "discarded";
 export type IntakeRowStatus = "needs_review" | "ready" | "committed" | "skipped";
 export type IntakeConfidence = "high" | "medium" | "low";
+export type IntakeNameMatch = "existing" | "new" | "ambiguous";
+
+/** How each match verdict is shown beside the field it describes. */
+export const INTAKE_MATCH_DISPLAY: Record<
+  IntakeNameMatch,
+  { label: string; tone: string; title: string }
+> = {
+  existing: {
+    label: "on file",
+    tone: "tone-muted",
+    title: "Matches something you already have — nothing new will be created.",
+  },
+  new: {
+    label: "new",
+    tone: "tone-warn",
+    title:
+      "Nothing on file matches this, so saving will create it. If it's a misspelling of something you already have, fix it here and the badge will change to “on file”.",
+  },
+  ambiguous: {
+    label: "matches more than one",
+    tone: "tone-bad",
+    title:
+      "This name matches more than one product, so it can't be matched automatically. Make the name specific, or change the category.",
+  },
+};
 
 /** One proposed inventory record, staged for review before it's committed. */
 export interface IntakeRow {
@@ -407,6 +432,13 @@ export interface IntakeRow {
   attributes: Record<string, string>;
   /** Required fields still empty — computed server-side, never sent up. */
   missing_fields: string[];
+  /**
+   * Per-field verdict on whether a name lines up with master data already on
+   * file, keyed by field name. Absent for a field that's blank. Lets the
+   * review screen point at the row with the odd spelling, which the
+   * batch-level `will_create` list can't.
+   */
+  name_matches: Record<string, IntakeNameMatch | undefined>;
   confidence: IntakeConfidence;
   status: IntakeRowStatus;
   commit_error: string | null;

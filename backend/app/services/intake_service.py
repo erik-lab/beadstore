@@ -267,6 +267,83 @@ def names_to_be_created(db: Session, batch: InventoryIntakeBatch) -> dict[str, l
     }
 
 
+# Per-field verdicts for the name fields that resolve to master data.
+MATCH_EXISTING = "existing"
+MATCH_NEW = "new"
+MATCH_AMBIGUOUS = "ambiguous"
+
+NAME_MATCH_MODELS = {
+    "category_name": ProductCategory,
+    "vendor_name": Vendor,
+    "location_name": Location,
+}
+
+
+def resolve_name_matches(db: Session, rows: list[InventoryIntakeRow]) -> dict[uuid.UUID, dict[str, str]]:
+    """Per row, say whether each name field lines up with something on file.
+
+    This is what lets the review screen mark the one row whose vendor is
+    spelled "Fire Mtn Gems" — the batch-level `will_create` list says a new
+    vendor would appear, but not which row to fix.
+
+    Queried in bulk (a handful of statements for the whole batch, not four per
+    row) so a 200-row import doesn't turn the review screen into a thousand
+    round trips.
+    """
+    if not rows:
+        return {}
+
+    # One lookup per master-data table, covering every name in the batch.
+    existing_names: dict[str, set[str]] = {}
+    for field, model in NAME_MATCH_MODELS.items():
+        wanted = {getattr(row, field).lower() for row in rows if getattr(row, field)}
+        existing_names[field] = (
+            {name.lower() for (name,) in db.query(model.name).filter(func.lower(model.name).in_(wanted))}
+            if wanted
+            else set()
+        )
+
+    # Products are matched by name within a category, so carry both and count
+    # the candidates — two products of the same name is ambiguity the reviewer
+    # has to settle, not a match.
+    product_names = {row.product_name.lower() for row in rows if row.product_name}
+    product_candidates: list[tuple[str, str | None]] = []
+    if product_names:
+        product_candidates = [
+            (name.lower(), category.lower() if category else None)
+            for name, category in db.query(Product.name, ProductCategory.name)
+            .outerjoin(ProductCategory, Product.category_id == ProductCategory.id)
+            .filter(
+                func.lower(Product.name).in_(product_names),
+                Product.status == ActiveArchivedStatus.active,
+            )
+        ]
+
+    verdicts: dict[uuid.UUID, dict[str, str]] = {}
+    for row in rows:
+        row_verdicts: dict[str, str] = {}
+
+        for field in NAME_MATCH_MODELS:
+            value = getattr(row, field)
+            if not value:
+                continue
+            row_verdicts[field] = (
+                MATCH_EXISTING if value.lower() in existing_names[field] else MATCH_NEW
+            )
+
+        if row.matched_product_id is not None:
+            row_verdicts["product_name"] = MATCH_EXISTING
+        elif row.product_name:
+            candidates = [c for c in product_candidates if c[0] == row.product_name.lower()]
+            if row.category_name:
+                candidates = [c for c in candidates if c[1] == row.category_name.lower()]
+            row_verdicts["product_name"] = MATCH_AMBIGUOUS if len(candidates) > 1 else MATCH_NEW
+
+        verdicts[row.id] = row_verdicts
+
+    return verdicts
+
+
 # --------------------------------------------------------------------------
 # Edits
 # --------------------------------------------------------------------------
@@ -311,6 +388,15 @@ def update_row(db: Session, row_id: uuid.UUID, changes: dict) -> InventoryIntake
         if field in EDITABLE_FIELDS:
             setattr(row, field, value)
 
+    # Correcting the name or category re-runs the product match, so fixing a
+    # misspelling actually lands on the existing product — and so the "new vs
+    # on file" indicator reflects the corrected name rather than the parse.
+    # An explicit matched_product_id in the same request wins; otherwise a
+    # renamed row gives up its old auto-match, since the old one described a
+    # different name.
+    if "matched_product_id" not in changes and ("product_name" in changes or "category_name" in changes):
+        row.matched_product_id = _find_existing_product_id(db, row.product_name, row.category_name)
+
     # Editing a row the reviewer had skipped brings it back into play.
     if row.status == IntakeRowStatus.skipped:
         row.status = IntakeRowStatus.needs_review
@@ -340,6 +426,11 @@ def bulk_update_rows(db: Session, batch_id: uuid.UUID, changes: dict) -> Invento
             continue
         for field, value in applicable.items():
             setattr(row, field, value)
+        # Setting the category for the whole batch can bring unmatched rows
+        # into range of an existing product. Rows already tied to a product
+        # keep that tie — a bulk fill shouldn't undo a deliberate pick.
+        if "category_name" in applicable and row.matched_product_id is None:
+            row.matched_product_id = _find_existing_product_id(db, row.product_name, row.category_name)
         row.commit_error = None
         refresh_row_state(row)
     db.commit()

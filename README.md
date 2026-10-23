@@ -191,7 +191,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-215 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+226 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
@@ -201,7 +201,8 @@ insufficient-stock rejection), the storefront-facing API (auth scoping, publishe
 price-tampering resistance), and the Etsy integration (OAuth/PKCE handshake, push/pull sync,
 webhook signature verification) driven against the built-in Etsy simulator rather than mocked, and
 inventory intake (text extraction from CSV/XLSX/DOCX/HTML, missing-field flagging, row editing and
-bulk fill, per-row commit isolation, existing-product matching, and keeping staging churn out of
+bulk fill, per-field new-vs-existing match indicators, per-row commit isolation, existing-product
+matching and re-matching after a correction, and keeping staging churn out of
 the audit log) with the AI parse itself stubbed.
 
 ### Frontend

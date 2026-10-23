@@ -99,6 +99,10 @@ class IntakeRowRead(ORMModel):
     attributes: dict[str, str]
     # Which required fields are still empty — the review screen's gap flags.
     missing_fields: list[str] = Field(validation_alias="missing_field_names")
+    # Per-field verdict for the names that resolve to master data — one of
+    # "existing", "new" or "ambiguous", keyed by field name, and absent for a
+    # field that's blank. Filled in by the router, not stored.
+    name_matches: dict[str, str] = Field(default_factory=dict)
     confidence: IntakeConfidence
     status: IntakeRowStatus
     commit_error: str | None

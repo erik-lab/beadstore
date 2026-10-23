@@ -357,6 +357,187 @@ def test_skipping_a_row_excludes_it_then_unskipping_restores_it(client, auth_hea
     assert restored["status"] == "ready"
 
 
+def test_each_name_field_says_whether_it_is_on_file(client, auth_headers, stub_parser, db_session):
+    """The batch-level list says a new vendor would appear; this says which row."""
+    category = ProductCategory(name="Beads")
+    db_session.add_all([category, Vendor(name="Fire Mountain Gems")])
+    db_session.commit()
+
+    stub_parser["result"] = parse_result(
+        [
+            parsed_row(vendor_name="fire mountain gems", location_name="Bin 4"),
+            parsed_row(product_name="6mm Bicone", category="Pendants", vendor_name="Fire Mtn Gems"),
+        ]
+    )
+    rows = post_text(client, auth_headers).json()["rows"]
+
+    assert rows[0]["name_matches"]["category_name"] == "existing"
+    # Matched case-insensitively against the vendor already on file.
+    assert rows[0]["name_matches"]["vendor_name"] == "existing"
+    assert rows[0]["name_matches"]["location_name"] == "new"
+    assert rows[0]["name_matches"]["product_name"] == "new"
+
+    # The misspelled vendor and the unknown category are flagged on their row.
+    assert rows[1]["name_matches"]["vendor_name"] == "new"
+    assert rows[1]["name_matches"]["category_name"] == "new"
+
+
+def test_blank_name_fields_get_no_verdict(client, auth_headers, stub_parser):
+    stub_parser["result"] = parse_result([parsed_row(vendor_name=None, location_name=None)])
+    matches = post_text(client, auth_headers).json()["rows"][0]["name_matches"]
+    assert "vendor_name" not in matches
+    assert "location_name" not in matches
+
+
+def test_a_name_matching_two_products_reads_as_ambiguous(client, auth_headers, stub_parser, db_session):
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Product(name="8mm Round Czech Glass", category_id=category.id),
+            Product(name="8mm round czech glass", category_id=category.id),
+        ]
+    )
+    db_session.commit()
+
+    stub_parser["result"] = parse_result([parsed_row()])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["matched_product_id"] is None
+    assert row["name_matches"]["product_name"] == "ambiguous"
+
+
+def test_an_archived_product_does_not_count_as_on_file(client, auth_headers, stub_parser, db_session):
+    from app.models.enums import ActiveArchivedStatus
+
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    db_session.add(
+        Product(
+            name="8mm Round Czech Glass",
+            category_id=category.id,
+            status=ActiveArchivedStatus.archived,
+        )
+    )
+    db_session.commit()
+
+    stub_parser["result"] = parse_result([parsed_row()])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["name_matches"]["product_name"] == "new"
+
+
+def test_correcting_a_name_rematches_and_updates_the_verdict(
+    client, auth_headers, stub_parser, db_session
+):
+    """Fixing a misspelling has to land on the existing product, not just
+    change the text — otherwise the indicator would keep saying 'new'."""
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    existing = Product(name="8mm Round Czech Glass", category_id=category.id)
+    db_session.add(existing)
+    db_session.commit()
+    existing_id = existing.id
+
+    stub_parser["result"] = parse_result([parsed_row(product_name="8mm Rnd Czech Gls")])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["matched_product_id"] is None
+    assert row["name_matches"]["product_name"] == "new"
+
+    corrected = client.patch(
+        f"/api/v1/inventory-intake/rows/{row['id']}",
+        json={"product_name": "8mm Round Czech Glass"},
+        headers=auth_headers,
+    ).json()
+    assert corrected["matched_product_id"] == str(existing_id)
+    assert corrected["name_matches"]["product_name"] == "existing"
+
+
+def test_correcting_a_vendor_spelling_updates_its_verdict(
+    client, auth_headers, stub_parser, db_session
+):
+    db_session.add(Vendor(name="Fire Mountain Gems"))
+    db_session.commit()
+
+    stub_parser["result"] = parse_result([parsed_row(vendor_name="Fire Mtn Gems")])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["name_matches"]["vendor_name"] == "new"
+
+    corrected = client.patch(
+        f"/api/v1/inventory-intake/rows/{row['id']}",
+        json={"vendor_name": "Fire Mountain Gems"},
+        headers=auth_headers,
+    ).json()
+    assert corrected["name_matches"]["vendor_name"] == "existing"
+
+
+def test_renaming_a_row_gives_up_a_stale_auto_match(client, auth_headers, stub_parser, db_session):
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    db_session.add(Product(name="8mm Round Czech Glass", category_id=category.id))
+    db_session.commit()
+
+    stub_parser["result"] = parse_result([parsed_row()])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["matched_product_id"] is not None
+
+    renamed = client.patch(
+        f"/api/v1/inventory-intake/rows/{row['id']}",
+        json={"product_name": "Something else entirely"},
+        headers=auth_headers,
+    ).json()
+    assert renamed["matched_product_id"] is None
+    assert renamed["name_matches"]["product_name"] == "new"
+
+
+def test_an_explicit_product_pick_survives_an_edit_in_the_same_request(
+    client, auth_headers, stub_parser, db_session
+):
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    chosen = Product(name="Totally different name", category_id=category.id)
+    db_session.add(chosen)
+    db_session.commit()
+    chosen_id = chosen.id
+
+    stub_parser["result"] = parse_result([parsed_row()])
+    row = post_text(client, auth_headers).json()["rows"][0]
+
+    updated = client.patch(
+        f"/api/v1/inventory-intake/rows/{row['id']}",
+        json={"product_name": "8mm Round Czech Glass", "matched_product_id": str(chosen_id)},
+        headers=auth_headers,
+    ).json()
+    assert updated["matched_product_id"] == str(chosen_id)
+
+
+def test_bulk_category_fill_can_bring_rows_into_range_of_a_product(
+    client, auth_headers, stub_parser, db_session
+):
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    existing = Product(name="8mm Round Czech Glass", category_id=category.id)
+    db_session.add(existing)
+    db_session.commit()
+    existing_id = existing.id
+
+    # No category from the source, so the name alone can't be scoped.
+    stub_parser["result"] = parse_result([parsed_row(category=None)])
+    batch = post_text(client, auth_headers).json()
+
+    rows = client.patch(
+        f"/api/v1/inventory-intake/batches/{batch['id']}/rows",
+        json={"category_name": "Beads"},
+        headers=auth_headers,
+    ).json()["rows"]
+    assert rows[0]["matched_product_id"] == str(existing_id)
+    assert rows[0]["name_matches"]["product_name"] == "existing"
+
+
 def test_will_create_lists_master_data_a_commit_would_add(client, auth_headers, stub_parser, db_session):
     db_session.add(Vendor(name="Fire Mountain Gems"))
     db_session.commit()
