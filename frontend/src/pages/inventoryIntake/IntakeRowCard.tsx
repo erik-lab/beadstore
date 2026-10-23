@@ -10,6 +10,9 @@ import {
   type IntakeRow,
 } from "../../lib/types";
 import { StatusBadge } from "../../components/StatusBadge";
+import { NameSelect } from "../../components/NameSelect";
+import { ProductSearchPicker } from "../../components/ProductSearchPicker";
+import type { IntakePickLists } from "../../lib/useIntakePickLists";
 
 /**
  * One draft row, editable in place.
@@ -97,13 +100,13 @@ const CONFIDENCE_NOTE: Record<IntakeRow["confidence"], string | null> = {
 
 export function IntakeRowCard({
   row,
-  categories,
+  pickLists,
   onChanged,
   onError,
 }: {
   row: IntakeRow;
-  /** Existing category names, offered as suggestions. */
-  categories: string[];
+  /** Existing names for the dropdowns, loaded once for the whole batch. */
+  pickLists: IntakePickLists;
   onChanged: (row: IntakeRow) => void;
   onError: (message: string) => void;
 }) {
@@ -111,6 +114,7 @@ export function IntakeRowCard({
   const [attributes, setAttributes] = useState<Record<string, string>>(() => ({ ...row.attributes }));
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   // Re-sync when the row changes underneath us — after a bulk fill or a
   // commit attempt, the server's version wins over local edits in progress.
@@ -200,6 +204,40 @@ export function IntakeRowCard({
     );
   }
 
+  /**
+   * A name that resolves to master data: pick from what exists, or type a new
+   * one. This is what makes an amber "new" badge actionable — open the list
+   * and find what it should have matched.
+   */
+  function nameField(
+    label: string,
+    name: "category_name" | "subtype_name" | "vendor_name" | "location_name",
+    options: string[],
+    opts?: { disabled?: boolean; blankLabel?: string; newLabel?: string },
+  ) {
+    const gapKey = GAP_FIELD[name];
+    const isMissing = gapKey ? missing.has(gapKey) : false;
+    const verdict = row.name_matches[name];
+    return (
+      <label className={fieldClasses(isMissing, verdict)}>
+        {label}
+        {isMissing && <span className="badge tone-warn" style={{ marginLeft: 6 }}>needed</span>}
+        <MatchBadge verdict={verdict} />
+        <NameSelect
+          value={draft[name]}
+          options={options}
+          disabled={locked || saving || opts?.disabled}
+          blankLabel={opts?.blankLabel ?? "None"}
+          newLabel={opts?.newLabel}
+          onChange={(value) => {
+            setDraft({ ...draft, [name]: value });
+            save({ [name]: value === "" ? null : value });
+          }}
+        />
+      </label>
+    );
+  }
+
   const unusedAttributes = PRODUCT_ATTRIBUTE_FIELDS.filter((f) => !(f.key in attributes));
   const confidenceNote = CONFIDENCE_NOTE[row.confidence];
 
@@ -242,27 +280,50 @@ export function IntakeRowCard({
 
       <div className="line-row">
         {field("Item name", "product_name")}
-        <label className={fieldClasses(missing.has("category_name"), row.name_matches.category_name)}>
-          Category
-          {missing.has("category_name") && (
-            <span className="badge tone-warn" style={{ marginLeft: 6 }}>needed</span>
-          )}
-          <MatchBadge verdict={row.name_matches.category_name} />
-          <input
-            list={`intake-categories-${row.id}`}
-            value={draft.category_name}
-            disabled={locked || saving || Boolean(row.matched_product_id)}
-            onChange={(e) => setDraft({ ...draft, category_name: e.target.value })}
-            onBlur={() => commitField("category_name")}
-          />
-          <datalist id={`intake-categories-${row.id}`}>
-            {categories.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-        </label>
-        {field("Subtype", "subtype_name")}
+        {nameField("Category", "category_name", pickLists.categories, {
+          // A row tied to an existing product takes that product's category.
+          disabled: Boolean(row.matched_product_id),
+          blankLabel: "Not set",
+          newLabel: "Add a new category...",
+        })}
+        {nameField("Subtype", "subtype_name", pickLists.subtypesFor(draft.category_name), {
+          blankLabel: "Unknown / not set",
+          newLabel: "Type a custom subtype...",
+        })}
       </div>
+
+      {!locked && (
+        <div className="maintenance-row">
+          <button className="btn-secondary" onClick={() => setPicking(!picking)} disabled={saving}>
+            {picking ? "Close product search" : "Find an existing product..."}
+          </button>
+          {row.matched_product_id && (
+            <button
+              className="btn-secondary"
+              onClick={() => save({ matched_product_id: null })}
+              disabled={saving}
+            >
+              Create a new product instead
+            </button>
+          )}
+        </div>
+      )}
+
+      {picking && !locked && (
+        <ProductSearchPicker
+          initialQuery={draft.product_name}
+          onPick={(product) => {
+            setPicking(false);
+            // Sent together with the id, which wins over re-matching by name.
+            save({
+              matched_product_id: product.id,
+              product_name: product.name,
+              category_name: product.category_name ?? (draft.category_name || null),
+            });
+          }}
+          onCancel={() => setPicking(false)}
+        />
+      )}
 
       <div className="line-row">
         {field("Quantity", "quantity", { type: "number", step: "0.001" })}
@@ -297,8 +358,14 @@ export function IntakeRowCard({
       </div>
 
       <div className="line-row">
-        {field("Vendor", "vendor_name")}
-        {field("Storage location", "location_name")}
+        {nameField("Vendor", "vendor_name", pickLists.vendors, {
+          blankLabel: "Not set",
+          newLabel: "Add a new vendor...",
+        })}
+        {nameField("Storage location", "location_name", pickLists.locations, {
+          blankLabel: "Not set",
+          newLabel: "Add a new location...",
+        })}
         {field("SKU / item code", "sku")}
       </div>
 
@@ -330,11 +397,20 @@ export function IntakeRowCard({
               {Object.entries(attributes).map(([key, value]) => (
                 <label key={key}>
                   {PRODUCT_ATTRIBUTE_FIELDS.find((f) => f.key === key)?.label ?? key}
+                  {/* Same hybrid pick list the product form offers, so an
+                      import reuses house wording instead of adding a synonym. */}
                   <input
                     value={value}
+                    list={`intake-attr-${row.id}-${key}`}
+                    autoComplete="off"
                     onChange={(e) => setAttributes({ ...attributes, [key]: e.target.value })}
                     onBlur={commitAttributes}
                   />
+                  <datalist id={`intake-attr-${row.id}-${key}`}>
+                    {pickLists.attributeOptionsFor(key).map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
                 </label>
               ))}
             </div>

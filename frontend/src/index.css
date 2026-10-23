@@ -713,11 +713,13 @@ legend {
 /* An imported name that doesn't line up with existing master data. Colored
    rather than outlined: it isn't an error (creating a new vendor is often
    exactly right), just something to look at before committing. */
-.field-new input {
+.field-new input,
+.field-new select {
   color: var(--warn);
 }
 
-.field-ambiguous input {
+.field-ambiguous input,
+.field-ambiguous select {
   color: var(--danger);
 }
 

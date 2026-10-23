@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, ApiError } from "../../lib/apiClient";
+import { ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import {
   bulkUpdateIntakeRows,
@@ -14,10 +14,11 @@ import {
   type IntakeBatchDetail,
   type IntakeCommitResult,
   type IntakeRow,
-  type ProductCategory,
 } from "../../lib/types";
+import { useIntakePickLists } from "../../lib/useIntakePickLists";
 import { Loading, ErrorState, EmptyState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
+import { NameSelect } from "../../components/NameSelect";
 import { IntakeRowCard } from "./IntakeRowCard";
 
 /**
@@ -67,7 +68,9 @@ function describeResult(result: IntakeCommitResult): string {
 export function InventoryImportReviewPage() {
   const { id = "" } = useParams();
   const loaded = useFetch(() => getIntakeBatch(id), [id]);
-  const categories = useFetch(() => api.get<ProductCategory[]>("/product-categories"), []);
+  // Loaded once here and handed to every row — 200 rows shouldn't each fetch
+  // the same category, vendor and location lists.
+  const pickLists = useIntakePickLists();
 
   const [batch, setBatch] = useState<IntakeBatchDetail | null>(null);
   const [bulk, setBulk] = useState<BulkDraft>(EMPTY_BULK);
@@ -130,6 +133,9 @@ export function InventoryImportReviewPage() {
       const committed = await commitIntakeBatch(id);
       setResult(committed);
       await refresh();
+      // A commit can have created categories, vendors or locations — pull them
+      // in so the dropdowns offer them to the rows still being worked on.
+      pickLists.reload();
     } catch (err) {
       setError(err instanceof ApiError ? String(err.detail) : "Could not save this import.");
     } finally {
@@ -158,7 +164,6 @@ export function InventoryImportReviewPage() {
   const willCreate = batch.will_create;
   const createsSomething =
     willCreate.categories.length + willCreate.vendors.length + willCreate.locations.length > 0;
-  const categoryNames = (categories.data ?? []).map((c) => c.name);
 
   return (
     <div>
@@ -268,30 +273,33 @@ export function InventoryImportReviewPage() {
               </label>
               <label>
                 Vendor
-                <input
+                <NameSelect
                   value={bulk.vendor_name}
-                  onChange={(e) => setBulk({ ...bulk, vendor_name: e.target.value })}
+                  options={pickLists.vendors}
+                  blankLabel="Leave as is"
+                  newLabel="Add a new vendor..."
+                  onChange={(value) => setBulk({ ...bulk, vendor_name: value })}
                 />
               </label>
               <label>
                 Storage location
-                <input
+                <NameSelect
                   value={bulk.location_name}
-                  onChange={(e) => setBulk({ ...bulk, location_name: e.target.value })}
+                  options={pickLists.locations}
+                  blankLabel="Leave as is"
+                  newLabel="Add a new location..."
+                  onChange={(value) => setBulk({ ...bulk, location_name: value })}
                 />
               </label>
               <label>
                 Category
-                <input
-                  list="bulk-categories"
+                <NameSelect
                   value={bulk.category_name}
-                  onChange={(e) => setBulk({ ...bulk, category_name: e.target.value })}
+                  options={pickLists.categories}
+                  blankLabel="Leave as is"
+                  newLabel="Add a new category..."
+                  onChange={(value) => setBulk({ ...bulk, category_name: value })}
                 />
-                <datalist id="bulk-categories">
-                  {categoryNames.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
               </label>
               <label>
                 Unit
@@ -334,7 +342,7 @@ export function InventoryImportReviewPage() {
           <IntakeRowCard
             key={row.id}
             row={row}
-            categories={categoryNames}
+            pickLists={pickLists}
             onChanged={handleRowChanged}
             onError={setError}
           />

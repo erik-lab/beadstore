@@ -227,7 +227,47 @@ out of the dependency list.
   `will_create` confirmation, a "fill in for every row" control, and one
   editable card per row with gaps outlined and labelled "needed".
 
-Two deliberate choices in the review screen:
+### Pickers, not free text
+
+A match badge is only useful if the reviewer can act on it, so every field
+that resolves to master data is a dropdown over what already exists, with an
+explicit escape hatch:
+
+| Field | Control |
+|---|---|
+| Category | dropdown of existing categories + "Add a new category…" |
+| Subtype | dropdown scoped to the chosen category + "Type a custom subtype…" |
+| Vendor | dropdown of existing vendors + "Add a new vendor…" |
+| Storage location | dropdown of existing locations + "Add a new location…" |
+| Item name | free text, plus **"Find an existing product…"** (search) |
+| Attributes | the product form's hybrid pick lists, as datalists |
+| Unit | the same fixed dropdown as everywhere else |
+
+`NameSelect` works in names rather than IDs, matching how the staging rows
+store them. A value that isn't in the list is kept as a selected option of its
+own, labelled "(new)", so an imported spelling is never silently dropped
+because nothing matches it. Matching is case-insensitive but the select is
+handed the option's own spelling, since a browser shows an unmatched value as
+blank — an import that says "beads" has to select the "Beads" option.
+
+Products get **search** rather than a dropdown (`ProductSearchPicker`): the
+catalog only grows, and the reviewer usually arrives knowing roughly what
+they're after because the badge flagged the name. It queries
+`/products?search=` server-side, debounced, so it keeps working past one page
+of results. Picking a product sends `matched_product_id` together with the
+name and category, which wins over re-matching by name. "Create a new product
+instead" detaches it, and that sticks — re-matching would otherwise
+immediately re-attach what was just detached.
+
+Pick lists are loaded **once per batch** by `useIntakePickLists` and passed
+down, or a 200-row review would fetch the same lists 200 times. Subtypes
+(scoped per category) and attribute options (fifteen separate endpoints) load
+on demand and are cached for the life of the page. A commit reloads them, so
+categories and vendors it created are offered to the rows still being worked
+on. A failed pick-list fetch is not fatal: the dropdown falls back to the
+value the import already holds.
+
+### Other deliberate choices in the review screen:
 
 - **Save on blur.** Edits round-trip as a field loses focus, and the server's
   response replaces the row — so the gap flags, match badges and status on
@@ -258,6 +298,6 @@ The parse quality itself has not been measured on Patti's real sources — the
 AI call is stubbed in tests, and no live Anthropic call has been made from
 this work. Everything around the parse (extraction, gap flagging, match
 indicators, editing, per-row commit isolation, audit behavior) is covered by
-74 tests. The first
+75 tests. The first
 real spreadsheet she imports is the actual test of the prompt, and the
 `parser_notes` field exists so the model can say what confused it.

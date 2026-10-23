@@ -514,6 +514,31 @@ def test_an_explicit_product_pick_survives_an_edit_in_the_same_request(
     assert updated["matched_product_id"] == str(chosen_id)
 
 
+def test_unlinking_a_matched_product_sticks(client, auth_headers, stub_parser, db_session):
+    """"Create a new product instead" has to survive — re-matching by name
+    would otherwise immediately re-attach the product just detached."""
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    db_session.add(Product(name="8mm Round Czech Glass", category_id=category.id))
+    db_session.commit()
+
+    stub_parser["result"] = parse_result([parsed_row()])
+    row = post_text(client, auth_headers).json()["rows"][0]
+    assert row["matched_product_id"] is not None
+
+    unlinked = client.patch(
+        f"/api/v1/inventory-intake/rows/{row['id']}",
+        json={"matched_product_id": None},
+        headers=auth_headers,
+    ).json()
+    assert unlinked["matched_product_id"] is None
+
+    # And it stays unlinked through a commit, creating a second product.
+    client.post(f"/api/v1/inventory-intake/batches/{row['batch_id']}/commit", headers=auth_headers)
+    assert db_session.query(Product).filter_by(name="8mm Round Czech Glass").count() == 2
+
+
 def test_bulk_category_fill_can_bring_rows_into_range_of_a_product(
     client, auth_headers, stub_parser, db_session
 ):
