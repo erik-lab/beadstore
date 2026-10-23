@@ -355,6 +355,114 @@ export const UNIT_TYPES: UnitType[] = [
   "other",
 ];
 
+/**
+ * The product attribute columns, in the order the product form shows them.
+ * Shared so the product form and inventory import can't drift apart.
+ */
+export const PRODUCT_ATTRIBUTE_FIELDS: { key: keyof Product; label: string }[] = [
+  { key: "material", label: "Material" },
+  { key: "color", label: "Color" },
+  { key: "size", label: "Size" },
+  { key: "shape", label: "Shape" },
+  { key: "finish", label: "Finish" },
+  { key: "hole_size", label: "Hole Size" },
+  { key: "origin", label: "Origin" },
+  { key: "strand_length", label: "Strand Length" },
+  { key: "count", label: "Count" },
+  { key: "grade", label: "Grade" },
+  { key: "condition", label: "Condition" },
+  { key: "manufacturing_method", label: "Manufacturing Method" },
+  { key: "design_motif", label: "Design Motif" },
+  { key: "hole_configuration", label: "Hole Configuration" },
+  { key: "cut_style", label: "Cut Style" },
+];
+
+export type IntakeSourceKind = "paste" | "spreadsheet" | "document" | "voice";
+export type IntakeBatchStatus = "draft" | "committed" | "discarded";
+export type IntakeRowStatus = "needs_review" | "ready" | "committed" | "skipped";
+export type IntakeConfidence = "high" | "medium" | "low";
+
+/** One proposed inventory record, staged for review before it's committed. */
+export interface IntakeRow {
+  id: string;
+  batch_id: string;
+  row_index: number;
+  /** The snippet of the source this row came from, for checking a value. */
+  raw_fragment: string | null;
+  product_name: string | null;
+  category_name: string | null;
+  subtype_name: string | null;
+  /** Set when this row tops up an existing product instead of creating one. */
+  matched_product_id: string | null;
+  matched_product_name: string | null;
+  quantity: number | null;
+  unit_type: string | null;
+  unit_cost: number | null;
+  vendor_name: string | null;
+  location_name: string | null;
+  received_date: string | null;
+  sku: string | null;
+  description: string | null;
+  notes: string | null;
+  attributes: Record<string, string>;
+  /** Required fields still empty — computed server-side, never sent up. */
+  missing_fields: string[];
+  confidence: IntakeConfidence;
+  status: IntakeRowStatus;
+  commit_error: string | null;
+  created_product_id: string | null;
+  created_inventory_unit_id: string | null;
+}
+
+/** Master data that committing a batch would add, shown for confirmation. */
+export interface IntakeNamesToCreate {
+  categories: string[];
+  vendors: string[];
+  locations: string[];
+  products: string[];
+}
+
+export interface IntakeBatch {
+  id: string;
+  source_kind: IntakeSourceKind;
+  source_name: string | null;
+  status: IntakeBatchStatus;
+  parser_notes: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntakeBatchDetail extends IntakeBatch {
+  raw_text: string | null;
+  rows: IntakeRow[];
+  will_create: IntakeNamesToCreate;
+}
+
+export interface IntakeCommitResult {
+  batch_id: string;
+  committed: number;
+  failed: number;
+  remaining: number;
+  batch_status: IntakeBatchStatus;
+}
+
+export const INTAKE_SOURCE_LABELS: Record<IntakeSourceKind, string> = {
+  paste: "Typed or pasted",
+  spreadsheet: "Spreadsheet",
+  document: "Document",
+  voice: "Dictated",
+};
+
+/** Field names the server reports as gaps, in words Patti would use. */
+export const INTAKE_FIELD_LABELS: Record<string, string> = {
+  product_name: "Item name",
+  category_name: "Category",
+  quantity: "Quantity",
+  unit_type: "Unit",
+  received_date: "Date received",
+};
+
 export const PO_STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   draft: "Draft",
   submitted: "Ordered",

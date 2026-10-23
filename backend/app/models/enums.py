@@ -158,6 +158,39 @@ class EtsyAccountStatus(str, enum.Enum):
     needs_reauth = "needs_reauth"
 
 
+class IntakeSourceKind(str, enum.Enum):
+    # Where the raw material for a staged inventory import came from. `voice`
+    # is dictation transcribed in the browser — by the time it reaches the
+    # server it's just text, parsed by exactly the same code path as a pasted
+    # note, which is what makes "speak an entry" behave like any other source.
+    paste = "paste"
+    spreadsheet = "spreadsheet"
+    document = "document"
+    voice = "voice"
+
+
+class IntakeBatchStatus(str, enum.Enum):
+    draft = "draft"
+    # Set once every row has been committed or skipped. A batch that commits
+    # some rows and leaves others needing work stays `draft`.
+    committed = "committed"
+    discarded = "discarded"
+
+
+class IntakeRowStatus(str, enum.Enum):
+    # Missing something required, so it can't be committed yet.
+    needs_review = "needs_review"
+    ready = "ready"
+    committed = "committed"
+    skipped = "skipped"
+
+
+class IntakeConfidence(str, enum.Enum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
 class EtsySyncStatus(str, enum.Enum):
     not_synced = "not_synced"
     pending = "pending"

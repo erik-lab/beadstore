@@ -17,6 +17,7 @@ from app.routers import (
     email_accounts,
     etsy,
     hints,
+    inventory_intake,
     inventory_units,
     locations,
     order_email_parse,
@@ -55,6 +56,7 @@ app.include_router(product_categories.subtype_router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
 app.include_router(catalog_listings.router, prefix="/api/v1")
 app.include_router(inventory_units.router, prefix="/api/v1")
+app.include_router(inventory_intake.router, prefix="/api/v1")
 app.include_router(locations.router, prefix="/api/v1")
 app.include_router(purchase_orders.router, prefix="/api/v1")
 app.include_router(receiving.router, prefix="/api/v1")

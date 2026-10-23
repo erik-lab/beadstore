@@ -11,6 +11,13 @@ const TONE_BY_STATUS: Record<string, string> = {
 
   delete: "tone-bad",
 
+  committed: "tone-good",
+
+  needs_review: "tone-warn",
+
+  skipped: "tone-muted",
+  discarded: "tone-muted",
+
   draft: "tone-neutral",
   expected: "tone-neutral",
   reserved: "tone-neutral",

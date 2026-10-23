@@ -10,6 +10,7 @@ import { Avatar } from "../components/Avatar";
 import {
   CatalogIcon,
   DashboardIcon,
+  ImportIcon,
   InventoryIcon,
   MailIcon,
   OrdersIcon,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { to: "/products", label: "Products", hintKey: "products", icon: ProductsIcon },
   { to: "/catalog-listings", label: "Catalog Listings", hintKey: "catalog-listings", icon: CatalogIcon },
   { to: "/inventory", label: "Inventory Units", hintKey: "inventory", icon: InventoryIcon },
+  { to: "/inventory-import", label: "Import Inventory", hintKey: "inventory-import", icon: ImportIcon },
   { to: "/pieces", label: "Piece Creations", hintKey: "pieces", icon: PieceIcon },
   { to: "/vendors", label: "Vendors", hintKey: "vendors", icon: VendorsIcon },
   { to: "/purchase-orders", label: "Supplier Orders", hintKey: "purchase-orders", icon: OrdersIcon },

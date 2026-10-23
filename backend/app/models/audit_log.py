@@ -77,6 +77,17 @@ def _diff(obj) -> dict | None:
     return changes or None
 
 
+def _is_audited(obj) -> bool:
+    """Whether changes to this record belong in the audit trail.
+
+    AuditMixin does two jobs: stamping who created/last touched a record, and
+    writing the trail. A staging table wants only the first — its rows churn
+    as they're edited and would bury the entries that matter — so it opts out
+    with `__audit__ = False` and still gets the stamping.
+    """
+    return getattr(obj, "__audit__", True)
+
+
 @event.listens_for(Session, "before_flush")
 def _capture_audit_trail(session: Session, flush_context, instances) -> None:
     from app.models.mixins import AuditMixin
@@ -101,14 +112,14 @@ def _capture_audit_trail(session: Session, flush_context, instances) -> None:
         obj.updated_by = actor_id
 
     entries = []
-    for obj in new_objs:
+    for obj in filter(_is_audited, new_objs):
         entries.append((obj, AuditAction.create, _snapshot(obj)))
-    for obj in dirty_objs:
+    for obj in filter(_is_audited, dirty_objs):
         changes = _diff(obj)
         if changes is None:
             continue
         entries.append((obj, AuditAction.update, changes))
-    for obj in deleted_objs:
+    for obj in filter(_is_audited, deleted_objs):
         entries.append((obj, AuditAction.delete, _snapshot(obj)))
 
     for obj, action, changes in entries:

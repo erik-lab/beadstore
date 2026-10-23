@@ -2,27 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
+import { PRODUCT_ATTRIBUTE_FIELDS as ATTRIBUTE_FIELDS } from "../../lib/types";
 import type { Product, ProductCategory, ProductSubtype } from "../../lib/types";
 
 const OTHER_VALUE = "__other__";
-
-const ATTRIBUTE_FIELDS: { key: keyof Product; label: string }[] = [
-  { key: "material", label: "Material" },
-  { key: "color", label: "Color" },
-  { key: "size", label: "Size" },
-  { key: "shape", label: "Shape" },
-  { key: "finish", label: "Finish" },
-  { key: "hole_size", label: "Hole Size" },
-  { key: "origin", label: "Origin" },
-  { key: "strand_length", label: "Strand Length" },
-  { key: "count", label: "Count" },
-  { key: "grade", label: "Grade" },
-  { key: "condition", label: "Condition" },
-  { key: "manufacturing_method", label: "Manufacturing Method" },
-  { key: "design_motif", label: "Design Motif" },
-  { key: "hole_configuration", label: "Hole Configuration" },
-  { key: "cut_style", label: "Cut Style" },
-];
 
 export function ProductFormPage() {
   const { id } = useParams();

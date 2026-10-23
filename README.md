@@ -62,6 +62,11 @@ Frontend runs at `http://localhost:5193` and expects the backend at `VITE_API_BA
 Nothing here needs redoing from scratch after a restart — the venv, `node_modules`, `.env` files,
 and local SQLite DB all persist on disk. Just:
 
+> **After pulling new commits**, run `./.venv/bin/pip install -r requirements.txt` and
+> `./.venv/bin/alembic upgrade head` first if either has changed. Import Inventory, for instance,
+> added both a dependency (`openpyxl`) and a migration — without the former, `.xlsx` uploads return
+> a 503 explaining it while every other format keeps working.
+
 ```bash
 # backend
 cd backend
@@ -186,7 +191,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-152 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+215 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
@@ -194,7 +199,10 @@ receiving with no prior order, required-field/numeric-bounds validation across t
 log's automatic create/update/delete capture, sales recording (FIFO inventory consumption,
 insufficient-stock rejection), the storefront-facing API (auth scoping, published-only visibility,
 price-tampering resistance), and the Etsy integration (OAuth/PKCE handshake, push/pull sync,
-webhook signature verification) driven against the built-in Etsy simulator rather than mocked.
+webhook signature verification) driven against the built-in Etsy simulator rather than mocked, and
+inventory intake (text extraction from CSV/XLSX/DOCX/HTML, missing-field flagging, row editing and
+bulk fill, per-row commit isolation, existing-product matching, and keeping staging churn out of
+the audit log) with the AI parse itself stubbed.
 
 ### Frontend
 
@@ -280,11 +288,23 @@ Supabase project:
 - Photos/media are placeholder fields only (`image_url`, `image_status`, `media_notes`) — no
   upload UI or storage, per the approved design.
 - `lot` remains a valid backend unit type for internal costing use but is intentionally excluded
-  from the UI's unit-type dropdown.
+  from the UI's unit-type dropdown. Import Inventory's AI parser is held to the same list, so it
+  can't propose a unit the review screen couldn't show selected.
+- Import Inventory's dictation uses the browser's own speech recognition, which Chrome, Edge and
+  Safari have and **Firefox does not**. The page detects this and points at the text box instead.
+- Import Inventory requires `ANTHROPIC_API_KEY`; unlike Order Email Scan there's no
+  pattern-matching fallback, because the sources are arbitrary. Without a key the page returns a
+  503 that says so.
+- Import Inventory's parse *quality* has not been measured against Patti's real spreadsheets and
+  invoices — the AI call is stubbed in tests. Everything around the parse is covered; the prompt
+  itself will need tuning once real sources come through.
 
 ## Deferred Features (per approved design)
 
 Customer-facing storefront, customer orders, payment processing, shipping workflow, image
-upload/media management, barcode scanning/generation, automated vendor import, AI extraction/OCR,
-complex accounting/tax handling, multi-warehouse fulfillment, and role-based permissions beyond
-authenticated access.
+upload/media management, barcode scanning/generation, complex accounting/tax handling,
+multi-warehouse fulfillment, and role-based permissions beyond authenticated access.
+
+Two items from this list have since been built, at Patti's request, and are no longer deferred:
+AI extraction/OCR and automated vendor import — see Order Email Scan (`Record Order`) and Import
+Inventory (`docs/design/inventory-intake.md`).

@@ -7,6 +7,7 @@ from app.models.etsy_account import EtsyAccount
 from app.models.etsy_listing_sync import EtsyListingSync
 from app.models.hint import Hint
 from app.models.inventory_adjustment import InventoryAdjustment
+from app.models.inventory_intake import InventoryIntakeBatch, InventoryIntakeRow
 from app.models.inventory_unit import InventoryUnit
 from app.models.location import Location
 from app.models.piece_creation import PieceComponent, PieceCreation
@@ -29,6 +30,8 @@ __all__ = [
     "EtsyListingSync",
     "Hint",
     "InventoryAdjustment",
+    "InventoryIntakeBatch",
+    "InventoryIntakeRow",
     "InventoryUnit",
     "Location",
     "PieceComponent",

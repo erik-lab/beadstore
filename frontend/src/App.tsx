@@ -11,6 +11,8 @@ import { ProductDetailPage } from "./pages/products/ProductDetailPage";
 import { CatalogListingsListPage } from "./pages/catalogListings/CatalogListingsListPage";
 import { CatalogListingFormPage } from "./pages/catalogListings/CatalogListingFormPage";
 import { CatalogListingDetailPage } from "./pages/catalogListings/CatalogListingDetailPage";
+import { InventoryImportPage } from "./pages/inventoryIntake/InventoryImportPage";
+import { InventoryImportReviewPage } from "./pages/inventoryIntake/InventoryImportReviewPage";
 import { InventoryUnitsListPage } from "./pages/inventoryUnits/InventoryUnitsListPage";
 import { InventoryUnitFormPage } from "./pages/inventoryUnits/InventoryUnitFormPage";
 import { InventoryUnitDetailPage } from "./pages/inventoryUnits/InventoryUnitDetailPage";
@@ -67,6 +69,10 @@ function App() {
 
             <Route path="inventory" element={<InventoryUnitsListPage />} />
             <Route path="inventory/new" element={<InventoryUnitFormPage />} />
+            {/* A sibling of /inventory rather than a child, so the sidebar can
+                highlight Import Inventory on its own. */}
+            <Route path="inventory-import" element={<InventoryImportPage />} />
+            <Route path="inventory-import/:id" element={<InventoryImportReviewPage />} />
             <Route path="inventory/:id" element={<InventoryUnitDetailPage />} />
             <Route path="inventory/:id/edit" element={<InventoryUnitFormPage />} />
 

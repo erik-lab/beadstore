@@ -697,6 +697,19 @@ legend {
   color: var(--warn);
 }
 
+.alert-info {
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+/* A required field an import is still missing — outlined so the gaps on a
+   long review screen can be found without reading every label. */
+.field-needed input,
+.field-needed select {
+  outline: 2px solid var(--warn);
+  outline-offset: 1px;
+}
+
 .state {
   padding: 24px;
   text-align: center;
