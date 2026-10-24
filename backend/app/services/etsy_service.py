@@ -1,9 +1,14 @@
 """Server-side Etsy OAuth (PKCE, mandatory per Etsy's docs) + Open API v3
 calls. Same shape as gmail_service.py/outlook_service.py — a thin client
-module, no state of its own. Every request goes to `settings.etsy_api_base_url`,
-which points at the real Etsy API in production and at this same server's
-built-in simulator (see app/etsy_simulator/) in local dev — the calling code
-in etsy_sync_service.py doesn't know or care which.
+module, no state of its own.
+
+Real Etsy splits this across three hosts — the seller consent page on
+www.etsy.com, token exchange on api.etsy.com, and everything else on
+openapi.etsy.com — so there are three base-URL settings. Each holds an origin
+only; the versioned path is appended here. In local dev all three point at
+this same server's built-in simulator (see app/etsy_simulator/), which mirrors
+the same relative paths, so the calling code in etsy_sync_service.py doesn't
+know or care which it's talking to.
 """
 import base64
 import hashlib
@@ -55,12 +60,12 @@ def build_authorize_url(redirect_uri: str, state: str, code_challenge: str) -> s
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
-    return f"{settings.etsy_api_base_url}{AUTHORIZE_PATH}?{urlencode(params)}"
+    return f"{settings.etsy_authorize_base_url}{AUTHORIZE_PATH}?{urlencode(params)}"
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str, code_verifier: str) -> dict:
     resp = httpx.post(
-        f"{settings.etsy_api_base_url}{TOKEN_PATH}",
+        f"{settings.etsy_token_base_url}{TOKEN_PATH}",
         data={
             "grant_type": "authorization_code",
             "client_id": settings.etsy_client_id,
@@ -81,9 +86,16 @@ def exchange_code_for_tokens(code: str, redirect_uri: str, code_verifier: str) -
     return data
 
 
-def refresh_access_token(refresh_token: str) -> str:
+def refresh_access_token(refresh_token: str) -> dict:
+    """Mint a fresh access token, and hand back any rotated refresh token.
+
+    Returns both because Etsy's refresh response carries a new refresh_token.
+    Discarding it risks losing the shop when the stored one reaches its 90-day
+    limit, so the caller persists whatever comes back — see
+    etsy_sync_service._access_token_for.
+    """
     resp = httpx.post(
-        f"{settings.etsy_api_base_url}{TOKEN_PATH}",
+        f"{settings.etsy_token_base_url}{TOKEN_PATH}",
         data={
             "grant_type": "refresh_token",
             "client_id": settings.etsy_client_id,
@@ -95,7 +107,8 @@ def refresh_access_token(refresh_token: str) -> str:
         raise EtsyAuthError("Etsy refresh token was rejected.")
     if not resp.is_success:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Etsy. Try again.")
-    return resp.json()["access_token"]
+    data = resp.json()
+    return {"access_token": data["access_token"], "refresh_token": data.get("refresh_token")}
 
 
 def _headers(access_token: str) -> dict:

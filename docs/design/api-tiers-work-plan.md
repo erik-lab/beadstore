@@ -230,6 +230,63 @@ by hand — see git history, not repeated here.
 OAuth consent screen, real rate limiting/error shapes, and whatever's actually different between
 the simulator's guesses (built from Etsy's *published* docs, fetched during planning — not
 assumed from training data, but still never exercised against the live API) and the real thing.
-That gap only closes once there's a real Etsy Developer Portal app and a shop to connect —
-`ETSY_CLIENT_ID`/`ETSY_CLIENT_SECRET`/`ETSY_API_BASE_URL` in `.env.example` are exactly the three
-settings that change when that happens; nothing else in the integration code should need to.
+That gap only closes once there's a real Etsy Developer Portal app and a shop to connect.
+
+> **Correction to the line that used to end this section.** It claimed three settings were all
+> that would change. That was wrong, and the simulator is why it looked right: real Etsy splits
+> across three *hosts* (consent on `www.etsy.com`, token on `api.etsy.com`, API on
+> `openapi.etsy.com`) where the simulator serves all of them from one origin. The code derived
+> every URL from a single `ETSY_API_BASE_URL` whose production default also carried `/v3`, which
+> the code appends itself — so going live would have produced `https://openapi.etsy.com/v3/v3/...`
+> and sent the consent screen to the wrong host. Fixed: three origin-only base settings, with
+> `test_production_urls_are_built_against_the_real_etsy_hosts` pinning the composition the
+> simulator can't check.
+
+## Pre-flight checklist for a real Etsy shop
+
+Ordered by what blocks what.
+
+**Fixed already**
+
+1. ~~Three hosts, origin-only base URLs~~ — see the correction above.
+2. ~~Rotated refresh tokens were discarded~~ — Etsy returns a refresh token on every refresh;
+   dropping it meant the shop silently died when the stored one hit its 90-day limit. Now
+   persisted when it changes.
+
+**Blocking a listing Patti can actually look at**
+
+3. **No listing images, and no activate step.** Etsy defines a draft as a listing that is not
+   active *or* has no image, and an image is required before it can be activated. The flow is
+   `createDraftListing` → `uploadListingImage` → `updateListingInventory` →
+   `updateListing(state=active)`; we implement the first and third. So today's push produces a
+   permanently-draft, image-less listing — which is fine for verifying the API wiring, and not
+   fine as the visual result Patti is being shown. This is the main piece of work, and it needs
+   image *storage* in the back office first: the product/listing image fields are still
+   placeholders (`image_url`, `image_status`, `media_notes`) with no upload UI, per the original
+   design's deferral.
+
+**Blocking Patti using it herself (fine for Erik testing)**
+
+4. **Raw numeric IDs are typed by hand.** `taxonomy_id`, `shipping_profile_id` and
+   `return_policy_id` are text inputs on the Etsy page. They have to be real IDs from the live
+   shop, and there's no way to look them up in the app. Fix: call `getShopShippingProfiles`,
+   `getShopReturnPolicies` and the seller-taxonomy endpoint and offer dropdowns — the same
+   pick-from-what-exists treatment inventory intake just got.
+
+**Worth knowing, not necessarily fixing first**
+
+5. **The webhook signature scheme is a guess.** `POST /etsy/webhook` verifies
+   `X-Etsy-Signature` as a hex HMAC-SHA256 of the raw body, and the simulator signs the same way,
+   so the test proves the two agree with each other — not that either matches Etsy. Expect to
+   adjust on first real delivery. The polling path (`pull_receipts`) is the safety net and needs
+   no webhook at all.
+6. **No rate-limit handling.** Etsy allows 10 requests/second and 10,000/day; nothing backs off
+   or retries on a 429. Irrelevant at Patti's volume, a problem for a bulk push of a few hundred
+   listings.
+7. **An access token is minted per operation.** Every push and pull does a refresh round trip
+   first. Correct, just chatty — caching until expiry is the obvious improvement if the call
+   volume ever matters.
+8. **Probably no sandbox.** No official Etsy test environment turned up; community guidance is to
+   test against a real shop using drafts, which are free, where publishing a listing carries
+   Etsy's usual per-listing fee. Treat "test site" as "real shop, draft listings" and keep the
+   simulator for everything that doesn't need to touch Etsy.

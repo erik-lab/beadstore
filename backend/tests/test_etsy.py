@@ -5,7 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.main import app as fastapi_app
 from app.services import etsy_service
 
@@ -18,7 +18,12 @@ def _configure(monkeypatch):
     monkeypatch.setattr(settings, "etsy_client_id", "test-keystring")
     monkeypatch.setattr(settings, "etsy_client_secret", "test-secret")
     monkeypatch.setattr(settings, "etsy_webhook_signing_secret", "test-webhook-secret")
+    # All three bases point at the simulator, which mirrors real Etsy's
+    # relative paths under one origin. Against real Etsy these differ
+    # (www.etsy.com / api.etsy.com / openapi.etsy.com).
     monkeypatch.setattr(settings, "etsy_api_base_url", "http://simulator/etsy-simulator")
+    monkeypatch.setattr(settings, "etsy_token_base_url", "http://simulator/etsy-simulator")
+    monkeypatch.setattr(settings, "etsy_authorize_base_url", "http://simulator/etsy-simulator")
 
     # Route etsy_service's httpx calls through the in-process app (real
     # network sockets aren't available/needed here) rather than to the live
@@ -79,6 +84,47 @@ def _connect_shop(client, auth_headers):
 def test_connect_requires_staff_auth(client):
     resp = client.get("/api/v1/etsy/connect")
     assert resp.status_code == 401
+
+
+def test_production_urls_are_built_against_the_real_etsy_hosts(monkeypatch):
+    """Pins what the simulator can't check.
+
+    Every path is appended to a base that holds an origin only, and all three
+    bases are the same host in local dev — so pointing a base at
+    ".../v3" would silently produce /v3/v3/... and only fail against live
+    Etsy. These are the hosts and paths Etsy's auth guide documents.
+    """
+    monkeypatch.setattr(settings, "etsy_authorize_base_url", "https://www.etsy.com")
+    monkeypatch.setattr(settings, "etsy_token_base_url", "https://api.etsy.com")
+    monkeypatch.setattr(settings, "etsy_api_base_url", "https://openapi.etsy.com")
+
+    authorize_url = etsy_service.build_authorize_url("https://app.example/cb", "state", "challenge")
+    assert authorize_url.startswith("https://www.etsy.com/oauth/connect?")
+
+    assert (
+        f"{settings.etsy_token_base_url}{etsy_service.TOKEN_PATH}"
+        == "https://api.etsy.com/v3/public/oauth/token"
+    )
+
+    # No doubled /v3 on the API paths.
+    for base, path in (
+        (settings.etsy_api_base_url, "/v3/application/shops/123"),
+        (settings.etsy_api_base_url, "/v3/application/users/7/shops"),
+    ):
+        url = f"{base}{path}"
+        assert url.startswith("https://openapi.etsy.com/v3/application/")
+        assert "/v3/v3/" not in url
+
+
+def test_default_base_urls_hold_origins_only():
+    """A default with a version path on it is the bug this guards against."""
+    defaults = Settings()
+    for base in (
+        defaults.etsy_authorize_base_url,
+        defaults.etsy_token_base_url,
+        defaults.etsy_api_base_url,
+    ):
+        assert not base.rstrip("/").endswith("/v3"), f"{base} should be an origin, not a versioned path"
 
 
 def test_full_oauth_flow_creates_account(client, auth_headers):

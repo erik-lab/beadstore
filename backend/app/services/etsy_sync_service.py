@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.crypto import decrypt_token
+from app.core.crypto import decrypt_token, encrypt_token
 from app.models.catalog_listing import CatalogListing
 from app.models.enums import EtsyAccountStatus, EtsySyncStatus, SaleChannel
 from app.models.etsy_account import EtsyAccount
@@ -25,8 +25,17 @@ def get_active_account_or_error(db: Session) -> EtsyAccount:
 
 
 def _access_token_for(db: Session, account: EtsyAccount) -> str:
+    stored = decrypt_token(account.refresh_token_encrypted)
     try:
-        return etsy_service.refresh_access_token(decrypt_token(account.refresh_token_encrypted))
+        tokens = etsy_service.refresh_access_token(stored)
+        # Etsy hands back a refresh token on every refresh. Persist it when it
+        # has changed, or the stored one eventually hits its 90-day limit and
+        # the shop silently needs reconnecting.
+        rotated = tokens.get("refresh_token")
+        if rotated and rotated != stored:
+            account.refresh_token_encrypted = encrypt_token(rotated)
+            db.commit()
+        return tokens["access_token"]
     except etsy_service.EtsyAuthError:
         account.status = EtsyAccountStatus.needs_reauth
         db.commit()
