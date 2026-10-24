@@ -302,12 +302,12 @@ def test_uploading_a_photo_stores_it_and_returns_a_url(client, auth_headers, db_
     assert body["is_primary"] is True
     assert body["alt_text"] == "Matte black beads"
     assert body["original_filename"] == "photo.jpg"
-    assert body["url"] == f"/api/v1/products/images/{body['id']}/file"
+    assert body["url"] == f"/products/images/{body['id']}/file"
     # Internal details stay internal.
     assert "storage_key" not in body
     assert "checksum" not in body
 
-    served = client.get(body["url"], headers=auth_headers)
+    served = client.get(f"/api/v1{body['url']}", headers=auth_headers)
     assert served.status_code == 200
     assert served.headers["content-type"] == "image/jpeg"
     assert Image.open(io.BytesIO(served.content)).size == (800, 600)

@@ -43,8 +43,12 @@ class ProductImageRead(ORMModel):
     original_filename: str | None
     alt_text: str | None
     created_at: datetime
-    # Where to fetch the image. Either this API's own endpoint, or a CDN URL
-    # when the bucket is public — the client just uses whatever it's given.
+    # Where to fetch the image, one of two shapes:
+    #   - an absolute https:// URL, when the bucket is public and the CDN can
+    #     serve it directly (no auth, no traffic through this process)
+    #   - otherwise a path relative to the API root, which the client appends
+    #     to its own base URL and fetches with its auth header
+    # The client tells them apart by whether it starts with "http".
     url: str
     # True for the first image, which is what Etsy shows in search results.
     is_primary: bool

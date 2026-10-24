@@ -390,6 +390,28 @@ export const PRODUCT_ATTRIBUTE_FIELDS: { key: keyof Product; label: string }[] =
   { key: "cut_style", label: "Cut Style" },
 ];
 
+/** A photo attached to a product. */
+export interface ProductImage {
+  id: string;
+  product_id: string;
+  content_type: string;
+  byte_size: number;
+  width: number | null;
+  height: number | null;
+  sort_order: number;
+  original_filename: string | null;
+  alt_text: string | null;
+  created_at: string;
+  /**
+   * Either an absolute https:// URL (public bucket, served by the CDN) or a
+   * path relative to the API root, which has to be fetched with the auth
+   * header. `useImageSrc` tells them apart.
+   */
+  url: string;
+  /** First image: what Etsy shows in search results. */
+  is_primary: boolean;
+}
+
 export type IntakeSourceKind = "paste" | "spreadsheet" | "document" | "voice";
 export type IntakeBatchStatus = "draft" | "committed" | "discarded";
 export type IntakeRowStatus = "needs_review" | "ready" | "committed" | "skipped";

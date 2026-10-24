@@ -796,3 +796,55 @@ legend {
   color: var(--text);
   margin-top: 8px;
 }
+
+/* Product photo management (components/ProductImageManager.tsx). */
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.image-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.image-card-preview {
+  position: relative;
+  /* Fixed-height box with the image contained rather than cropped: a bead
+     strand photographed long and thin shouldn't get its ends cut off. */
+  height: 200px;
+  background: var(--muted-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-card-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-card-flag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.image-card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-card-body .page-subtitle {
+  margin: 0;
+  font-size: 12px;
+}

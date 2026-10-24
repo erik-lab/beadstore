@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import { PRODUCT_ATTRIBUTE_FIELDS as ATTRIBUTE_FIELDS } from "../../lib/types";
+import { ImageTooLargeError, MAX_IMAGES_PER_PRODUCT, uploadProductImage } from "../../lib/productImages";
+import { IMAGE_FILE_ACCEPT } from "../../components/ProductImageManager";
 import type { Product, ProductCategory, ProductSubtype } from "../../lib/types";
 
 const OTHER_VALUE = "__other__";
@@ -31,6 +33,31 @@ export function ProductFormPage() {
   const [subtypes, setSubtypes] = useState<ProductSubtype[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Photos picked before the product exists. They can't be uploaded until it
+  // has an id, so they're held here and sent right after the create. On the
+  // edit form this stays empty — photos are managed on the detail page,
+  // where they can be reordered and removed too.
+  const [stagedPhotos, setStagedPhotos] = useState<File[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  /** Upload the staged photos to a product that now exists. */
+  async function uploadStagedPhotos(productId: string): Promise<string[]> {
+    const failures: string[] = [];
+    for (const file of stagedPhotos) {
+      try {
+        await uploadProductImage(productId, file);
+      } catch (err) {
+        const reason =
+          err instanceof ImageTooLargeError
+            ? err.message
+            : err instanceof ApiError
+              ? String(err.detail)
+              : "upload failed";
+        failures.push(`${file.name}: ${reason}`);
+      }
+    }
+    return failures;
+  }
 
   useEffect(() => {
     if (existing.data) {
@@ -117,7 +144,13 @@ export function ProductFormPage() {
         navigate(`/products/${id}`);
       } else {
         const created = await api.post<Product>("/products", payload);
-        navigate(`/products/${created.id}`);
+        // Photos can only be attached once the product exists, so any picked
+        // here are uploaded now. A failure doesn't lose the product — it
+        // lands on the detail page with a note, where they can be retried.
+        const failures = await uploadStagedPhotos(created.id);
+        navigate(`/products/${created.id}`, {
+          state: failures.length > 0 ? { photoErrors: failures } : undefined,
+        });
       }
     } catch (err) {
       setError(err instanceof ApiError ? String(err.detail) : "Could not save product.");
@@ -181,6 +214,54 @@ export function ProductFormPage() {
           Description (optional)
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
+
+        {!isEdit && (
+          <fieldset>
+            <legend>Photos (optional)</legend>
+            <p className="page-subtitle">
+              Added once the product is saved. You can reorder, describe and remove them on the
+              product page afterwards.
+            </p>
+            <div className="maintenance-row">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={submitting || stagedPhotos.length >= MAX_IMAGES_PER_PRODUCT}
+              >
+                Choose Photos
+              </button>
+              {stagedPhotos.length > 0 && (
+                <>
+                  <span className="page-subtitle">
+                    {stagedPhotos.length} selected: {stagedPhotos.map((f) => f.name).join(", ")}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setStagedPhotos([])}
+                    disabled={submitting}
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept={IMAGE_FILE_ACCEPT}
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? []);
+                setStagedPhotos((prev) => [...prev, ...picked].slice(0, MAX_IMAGES_PER_PRODUCT));
+                // Cleared so re-picking the same file still fires a change.
+                if (photoInputRef.current) photoInputRef.current.value = "";
+              }}
+            />
+          </fieldset>
+        )}
 
         <label>
           Supplier's item code (optional)

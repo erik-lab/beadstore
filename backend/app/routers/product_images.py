@@ -49,7 +49,10 @@ def _to_read(image: ProductImage, is_primary: bool) -> ProductImageRead:
                 "created_at",
             )
         },
-        url=public or f"/api/v1/products/images/{image.id}/file",
+        # Relative to the API root, like every other path the client builds —
+        # its base URL already carries the /api/v1 prefix, so including it
+        # here would double it.
+        url=public or f"/products/images/{image.id}/file",
         is_primary=is_primary,
     )
 

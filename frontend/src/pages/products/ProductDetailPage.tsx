@@ -1,12 +1,15 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import type { CatalogListing, InventoryUnit, Product, PurchaseOrderLine, ReceiptLine } from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
+import { ProductImageManager } from "../../components/ProductImageManager";
 
 export function ProductDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const photoErrors = (location.state as { photoErrors?: string[] } | null)?.photoErrors ?? [];
   const product = useFetch(() => api.get<Product>(`/products/${id}`), [id]);
   const inventoryUnits = useFetch(() => api.get<InventoryUnit[]>(`/products/${id}/inventory-units`), [id]);
   const catalogListings = useFetch(() => api.get<CatalogListing[]>(`/products/${id}/catalog-listings`), [id]);
@@ -81,6 +84,21 @@ export function ProductDetailPage() {
           <dt>Cut Style</dt>
           <dd>{p.cut_style ?? "—"}</dd>
         </dl>
+      </section>
+
+      <section className="detail-section">
+        <h2>Photos</h2>
+        {/* Photos picked on the create form are uploaded after the product
+            exists, so a failure there surfaces here rather than being lost
+            behind the navigation. */}
+        {photoErrors.length > 0 && (
+          <div className="alert alert-warn">
+            The product was saved, but {photoErrors.length === 1 ? "a photo" : "some photos"}{" "}
+            couldn't be added: {photoErrors.join(" · ")}. Try adding{" "}
+            {photoErrors.length === 1 ? "it" : "them"} again below.
+          </div>
+        )}
+        <ProductImageManager productId={p.id} />
       </section>
 
       <section className="detail-section">

@@ -58,8 +58,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * Fetch a binary response (an image, say) with the same auth and 401 retry.
+ *
+ * Needed because an <img src> can't carry an Authorization header, so a
+ * protected image has to be fetched here and handed to the browser as an
+ * object URL instead.
+ */
+async function requestBlob(path: string): Promise<Blob> {
+  const options: RequestInit = { method: "GET" };
+  let response = await doFetch(path, options, false);
+  if (response.status === 401) {
+    response = await doFetch(path, options, true);
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, response.statusText);
+  }
+  return response.blob();
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
+  getBlob: (path: string) => requestBlob(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>

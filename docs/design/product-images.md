@@ -148,9 +148,41 @@ usual causes — missing bucket, wrong endpoint shape, mismatched region,
 revoked key. Deliberately independent of auth, products and the UI, so it
 isolates storage from everything layered on top of it.
 
-## Not done yet
+## UI
 
-- **No UI.** Upload from the product page is the next piece.
+- **Product page → Photos.** Add, reorder, describe, remove. The first photo
+  carries a "Main photo" badge, and on the second photo the "move up" button
+  reads "Make main" instead, since that's what the move actually does.
+- **New-product form → Photos.** Files can be picked while entering the
+  product, but can't be uploaded until it has an id, so they're held and sent
+  straight after the create. A failure there doesn't lose the product: it
+  lands on the detail page with a note naming what failed, where it can be
+  retried. The edit form has no picker — photos are managed on the detail
+  page, where reordering and removal live too.
+
+Uploads run **sequentially**, not in parallel: each posts a base64 body of up
+to ~20MB, and the order they complete in is the order the photos end up in.
+
+### Serving an authenticated image
+
+An `<img src>` cannot carry an Authorization header, so a private image can't
+simply be pointed at the API. `useImageSrc` handles the two cases the server
+returns:
+
+- an **absolute URL** (public bucket, CDN) is used as-is — no auth, no bytes
+  through the API, normal browser caching
+- a **path relative to the API root** is fetched through the API client, with
+  its auth header and 401 retry, and handed to the browser as an object URL
+
+Object URLs are revoked on unmount and on change, or every photo viewed would
+stay pinned in memory for the life of the tab.
+
+The `url` field being API-root-relative rather than absolute-from-origin
+matters: `VITE_API_BASE_URL` already ends in `/api/v1`, so a path including
+that prefix would have been requested as `/api/v1/api/v1/...` and every image
+would have 404'd.
+
+## Not done yet
 - **No Etsy image push.** `uploadListingImage` plus
   `updateListing(state=active)` is what finally makes a listing visible; see
   the pre-flight checklist in `api-tiers-work-plan.md`.
