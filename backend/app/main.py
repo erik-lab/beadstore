@@ -23,6 +23,7 @@ from app.routers import (
     order_email_parse,
     piece_creations,
     product_categories,
+    product_images,
     products,
     purchase_orders,
     receiving,
@@ -54,6 +55,10 @@ app.include_router(vendors.router, prefix="/api/v1")
 app.include_router(product_categories.router, prefix="/api/v1")
 app.include_router(product_categories.subtype_router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
+# Shares the /products prefix but can't collide with it: every route here is
+# two or more segments deep (/products/images/{id}, /products/{id}/images),
+# where the product detail route is one.
+app.include_router(product_images.router, prefix="/api/v1")
 app.include_router(catalog_listings.router, prefix="/api/v1")
 app.include_router(inventory_units.router, prefix="/api/v1")
 app.include_router(inventory_intake.router, prefix="/api/v1")

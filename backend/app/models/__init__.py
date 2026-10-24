@@ -13,6 +13,7 @@ from app.models.location import Location
 from app.models.piece_creation import PieceComponent, PieceCreation
 from app.models.product import Product
 from app.models.product_category import ProductCategory, ProductSubtype
+from app.models.product_image import ProductImage
 from app.models.profile import Profile
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderLine
 from app.models.receipt import Receipt, ReceiptLine
@@ -38,6 +39,7 @@ __all__ = [
     "PieceCreation",
     "Product",
     "ProductCategory",
+    "ProductImage",
     "ProductSubtype",
     "Profile",
     "PurchaseOrder",

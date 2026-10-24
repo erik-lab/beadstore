@@ -10,6 +10,11 @@ psycopg2-binary>=2.9,<3.0
 # Reads .xlsx inventory sources. Imported lazily, so a stale virtualenv
 # without it still serves every other intake format.
 openpyxl>=3.1,<4.0
+# Product photos: decoding, EXIF/GPS stripping and resizing. Imported lazily.
+pillow>=10.3,<12.0
+# S3-compatible object storage (Supabase Storage on Render). Imported lazily,
+# so local-filesystem storage works without it.
+boto3>=1.34,<2.0
 python-dotenv>=1.0,<2.0
 
 pytest>=8.2,<9.0

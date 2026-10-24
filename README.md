@@ -198,7 +198,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-227 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+301 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
@@ -207,6 +207,9 @@ log's automatic create/update/delete capture, sales recording (FIFO inventory co
 insufficient-stock rejection), the storefront-facing API (auth scoping, published-only visibility,
 price-tampering resistance), and the Etsy integration (OAuth/PKCE handshake, push/pull sync,
 webhook signature verification) driven against the built-in Etsy simulator rather than mocked, and
+product codes (check-character validation, uniqueness, immutability), product images (the storage
+adapter driven for real against local storage, EXIF/GPS stripping, orientation, resizing, ordering
+and duplicate detection), and
 inventory intake (text extraction from CSV/XLSX/DOCX/HTML, missing-field flagging, row editing and
 bulk fill, per-field new-vs-existing match indicators, per-row commit isolation, existing-product
 matching and re-matching after a correction, and keeping staging churn out of
@@ -293,8 +296,11 @@ Supabase project:
   generated from the OpenAPI spec (noted as a recommendation in the design doc; not done in this
   pass).
 - No pagination controls in the UI yet, though list endpoints support `limit`/`offset`.
-- Photos/media are placeholder fields only (`image_url`, `image_status`, `media_notes`) — no
-  upload UI or storage, per the approved design.
+- Product photos have storage and an API (see `docs/design/product-images.md`) but **no upload UI
+  yet**, and nothing pushes them to Etsy. The older `image_url` / `image_status` / `media_notes`
+  columns on `products` are superseded by the `product_images` table and remain unused.
+- The Supabase Storage backend has never been exercised against real Supabase from this
+  environment; local-filesystem storage is what the tests drive.
 - `lot` remains a valid backend unit type for internal costing use but is intentionally excluded
   from the UI's unit-type dropdown. Import Inventory's AI parser is held to the same list, so it
   can't propose a unit the review screen couldn't show selected.

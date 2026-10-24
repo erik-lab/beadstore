@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     gmail_orders_label: str = "Bead Store Orders"
     outlook_orders_label: str = "Bead Store Orders"
 
+    # Where uploaded product photos live — see app/core/storage.py.
+    # "local" writes to storage_local_root, which is right for development and
+    # wrong for Render, whose filesystem doesn't survive a deploy. "s3" points
+    # at Supabase Storage's S3 endpoint with storage-scoped access keys (NOT
+    # the service-role key, which could bypass every database policy).
+    storage_backend: str = "local"
+    storage_local_root: str = "./var/uploads"
+    storage_s3_endpoint_url: str = ""
+    storage_s3_region: str = "us-east-1"
+    storage_s3_bucket: str = ""
+    storage_s3_access_key_id: str = ""
+    storage_s3_secret_access_key: str = ""
+    # Set only for a public bucket: images are then served straight from the
+    # CDN instead of streaming through this process.
+    storage_public_base_url: str = ""
+
     # Etsy integration (see docs/design/api-tiers-work-plan.md Phase 3).
     #
     # Real Etsy splits these across THREE hosts, so they're three settings:
