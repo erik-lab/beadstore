@@ -108,6 +108,16 @@ not being in `certifi`'s bundle — ask whoever manages the machine's antivirus/
 root certificate, or look into the `pip-system-certs` package (which makes Python trust the OS
 certificate store instead of its own bundled one).
 
+**`CERTIFICATE_VERIFY_FAILED` from the app, not just pip** — something local is
+intercepting HTTPS (corporate proxy, VPN, or antivirus HTTPS scanning) and presenting its own
+certificate. It affects outbound calls to Supabase Storage, Anthropic and Etsy, not only `pip`.
+`python -m scripts.check_storage` prints the full fix when it hits this. The short version: export
+the roots your machine already trusts to a PEM and set `AWS_CA_BUNDLE` to it in `backend/.env`, or
+`pip install truststore` to have Python use the OS trust store for every library at once. Never
+disable certificate verification — that setting would follow the code into production, where the
+interception doesn't exist and the risk is real. A deployed server normally doesn't see this at
+all, so it blocks local testing rather than deploying.
+
 **`./.venv/bin/<something>: No such file or directory` on Windows** — the venv layout is
 `.venv/Scripts/` on Windows, not `.venv/bin/`. Use `./.venv/Scripts/alembic`,
 `./.venv/Scripts/python`, `./.venv/Scripts/uvicorn`, etc. instead. If the venv is *activated*

@@ -47,6 +47,65 @@ def describe_configuration() -> None:
     print()
 
 
+MISSING_PACKAGE_ADVICE = """Nothing is wrong with the configuration above — install the dependencies
+and run this again:
+
+  pip install -r requirements.txt"""
+
+TLS_INTERCEPTION_ADVICE = """This is a TLS trust problem on THIS MACHINE, not a problem with the
+configuration above, the bucket, or the credentials. Something local is
+intercepting HTTPS (corporate proxy, VPN, or antivirus HTTPS scanning) and
+presenting its own certificate, which Python doesn't trust. It's the same
+cause as pip needing --trusted-host.
+
+A deployed server almost certainly won't see this, so it does not block
+deploying — only testing from here.
+
+To fix it locally, point the AWS SDK at a bundle that includes the
+intercepting root. botocore reads AWS_CA_BUNDLE, so no code change is needed.
+Exporting every root your machine already trusts is the reliable way to get
+one, from PowerShell:
+
+  $out = "$HOME\\windows-roots.pem"
+  Get-ChildItem Cert:\\LocalMachine\\Root, Cert:\\CurrentUser\\Root | ForEach-Object {
+    "-----BEGIN CERTIFICATE-----"
+    [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks')
+    "-----END CERTIFICATE-----"
+  } | Set-Content $out
+
+Then add to backend/.env:
+
+  AWS_CA_BUNDLE=C:\\Users\\<you>\\windows-roots.pem
+
+Alternatively `pip install truststore` and have Python use the OS trust store
+directly, which fixes this for every library at once rather than just the AWS
+SDK. Do NOT disable certificate verification — that would be carried into
+production, where the interception doesn't exist and the risk is real."""
+
+CONFIGURATION_ADVICE = """Common causes:
+  - the bucket doesn't exist yet (create it in Supabase first)
+  - STORAGE_S3_BUCKET doesn't match the bucket's name
+  - the endpoint is wrong; it should look like
+    https://<project-ref>.supabase.co/storage/v1/s3
+  - the region doesn't match the one shown on the S3 Configuration page
+  - the access key was revoked, or the secret was mistyped"""
+
+
+def advice_for(exc: Exception) -> str:
+    """Advice matched to the failure, not a list of everything it could be.
+
+    Printing the bucket-and-credentials checklist under an error that was
+    really a missing package, or a local certificate problem, sends you
+    looking in the wrong place — which it did twice before this existed.
+    """
+    message = str(exc)
+    if "pip install" in message:
+        return MISSING_PACKAGE_ADVICE
+    if "CERTIFICATE_VERIFY_FAILED" in message or "SSL" in message:
+        return TLS_INTERCEPTION_ADVICE
+    return CONFIGURATION_ADVICE
+
+
 def main() -> int:
     describe_configuration()
 
@@ -91,20 +150,7 @@ def main() -> int:
     except StorageError as exc:
         print("FAILED")
         print(f"\n{exc}\n")
-        # A missing package is nothing to do with buckets or credentials, and
-        # printing those causes underneath it sends you looking in the wrong
-        # place — which is exactly what this did the first time it fired.
-        if "pip install" in str(exc):
-            print("Nothing is wrong with the configuration above — install the")
-            print("dependencies and run this again.")
-        else:
-            print("Common causes:")
-            print("  - the bucket doesn't exist yet (create it in Supabase first)")
-            print("  - STORAGE_S3_BUCKET doesn't match the bucket's name")
-            print("  - the endpoint is wrong; it should look like")
-            print("    https://<project-ref>.supabase.co/storage/v1/s3")
-            print("  - the region doesn't match the one shown on the S3 Configuration page")
-            print("  - the access key was revoked, or the secret was mistyped")
+        print(advice_for(exc))
         # Best-effort tidy-up, in case the write succeeded and a later step failed.
         try:
             store.delete(TEST_KEY)
