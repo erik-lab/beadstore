@@ -17,36 +17,79 @@ never a way to skip verification — certificates are still verified, just
 against the trust store the machine's own browser uses.
 """
 import logging
+import sys
+from dataclasses import dataclass
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_applied = False
+
+@dataclass(frozen=True)
+class TrustStoreStatus:
+    """Whether the OS trust store was asked for, and whether it took effect.
+
+    Carries `detail` because "requested but not active" has several causes
+    that need different fixes, and reporting only a boolean sent me chasing
+    the wrong one: a package installed under a *different* interpreter looks
+    identical to one not installed at all.
+    """
+
+    requested: bool
+    active: bool
+    detail: str
 
 
-def apply_system_trust_store() -> bool:
-    """Patch ssl to use the OS trust store. Returns whether it took effect.
+_status = TrustStoreStatus(requested=False, active=False, detail="not requested")
+
+
+def trust_store_status() -> TrustStoreStatus:
+    return _status
+
+
+def apply_system_trust_store() -> TrustStoreStatus:
+    """Patch ssl to use the OS trust store.
 
     Must run before anything creates an SSL context, so callers invoke it at
     start-up rather than at the point of a request. Idempotent, since both
     the app and the maintenance scripts call it.
     """
-    global _applied
-    if not settings.use_system_trust_store or _applied:
-        return _applied
+    global _status
+
+    if not settings.use_system_trust_store:
+        _status = TrustStoreStatus(requested=False, active=False, detail="not requested")
+        return _status
+    if _status.active:
+        return _status
 
     try:
         import truststore
-    except ImportError:
-        logger.warning(
-            "USE_SYSTEM_TRUST_STORE is on but the truststore package isn't installed "
-            "(pip install -r requirements.txt). Falling back to Python's own CA bundle."
+    except ImportError as exc:
+        # The interpreter running this is the one that needs the package, and
+        # it is not necessarily the one `pip` resolves to — the same trap as
+        # a `pip` outside the virtualenv. So name it.
+        detail = (
+            f"truststore could not be imported ({exc}). The interpreter that needs it is "
+            f"{sys.executable} — check the package is installed for that one, not another "
+            f"Python on the machine: \"{sys.executable}\" -m pip install truststore"
         )
-        return False
+        logger.warning("USE_SYSTEM_TRUST_STORE is on but %s", detail)
+        _status = TrustStoreStatus(requested=True, active=False, detail=detail)
+        return _status
 
-    truststore.inject_into_ssl()
-    _applied = True
+    try:
+        truststore.inject_into_ssl()
+    except Exception as exc:  # noqa: BLE001 - truststore raises on unsupported platforms
+        detail = f"truststore {getattr(truststore, '__version__', '?')} failed to install itself: {exc}"
+        logger.warning("USE_SYSTEM_TRUST_STORE is on but %s", detail)
+        _status = TrustStoreStatus(requested=True, active=False, detail=detail)
+        return _status
+
+    _status = TrustStoreStatus(
+        requested=True,
+        active=True,
+        detail=f"verifying against the OS certificate store (truststore from {truststore.__file__})",
+    )
     logger.info("Using the operating system's certificate store for TLS verification.")
-    return True
+    return _status

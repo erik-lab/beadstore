@@ -644,18 +644,37 @@ def test_a_non_botocore_exception_falls_back_to_its_text():
 # OS trust store
 # --------------------------------------------------------------------------
 
+def _reset_trust(monkeypatch, trust, requested=False):
+    monkeypatch.setattr(
+        trust, "_status", trust.TrustStoreStatus(requested=requested, active=False, detail="reset")
+    )
+
+
+def _fake_truststore(monkeypatch, on_inject=None):
+    module = type(
+        "truststore",
+        (),
+        {
+            "inject_into_ssl": staticmethod(on_inject or (lambda: None)),
+            "__file__": "/fake/truststore/__init__.py",
+            "__version__": "0.10.0",
+        },
+    )
+    monkeypatch.setitem(sys.modules, "truststore", module)
+    return module
+
+
 def test_trust_store_is_off_unless_asked_for(monkeypatch):
     """A server has no HTTPS interception to work around."""
     from app.core import trust
 
     monkeypatch.setattr(trust.settings, "use_system_trust_store", False)
-    monkeypatch.setattr(trust, "_applied", False)
+    _reset_trust(monkeypatch, trust)
     injected = []
-    monkeypatch.setitem(
-        sys.modules, "truststore", type("truststore", (), {"inject_into_ssl": lambda: injected.append(True)})
-    )
+    _fake_truststore(monkeypatch, lambda: injected.append(True))
 
-    assert trust.apply_system_trust_store() is False
+    status = trust.apply_system_trust_store()
+    assert (status.requested, status.active) == (False, False)
     assert injected == []
 
 
@@ -663,32 +682,54 @@ def test_trust_store_is_applied_once_when_enabled(monkeypatch):
     from app.core import trust
 
     monkeypatch.setattr(trust.settings, "use_system_trust_store", True)
-    monkeypatch.setattr(trust, "_applied", False)
+    _reset_trust(monkeypatch, trust, requested=True)
     injected = []
-    monkeypatch.setitem(
-        sys.modules, "truststore", type("truststore", (), {"inject_into_ssl": lambda: injected.append(True)})
-    )
+    _fake_truststore(monkeypatch, lambda: injected.append(True))
 
-    assert trust.apply_system_trust_store() is True
+    assert trust.apply_system_trust_store().active is True
     # Called again by another entry point — the app and the scripts both do.
-    assert trust.apply_system_trust_store() is True
+    assert trust.apply_system_trust_store().active is True
     assert len(injected) == 1
-    monkeypatch.setattr(trust, "_applied", False)
 
 
-def test_a_missing_truststore_package_warns_and_carries_on(monkeypatch):
-    """Turning the flag on without the package shouldn't break start-up."""
+def test_a_missing_truststore_names_the_interpreter_that_needs_it(monkeypatch):
+    """"Installed but not importable" is nearly always the wrong Python.
+
+    Reporting only a boolean sent me chasing a reinstall when the package was
+    already there — under a different interpreter.
+    """
     from app.core import trust
 
     monkeypatch.setattr(trust.settings, "use_system_trust_store", True)
-    monkeypatch.setattr(trust, "_applied", False)
+    _reset_trust(monkeypatch, trust, requested=True)
 
     real_import = builtins.__import__
 
     def without_truststore(name, *args, **kwargs):
         if name == "truststore":
-            raise ImportError("not installed")
+            raise ImportError("No module named 'truststore'")
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", without_truststore)
-    assert trust.apply_system_trust_store() is False
+    status = trust.apply_system_trust_store()
+
+    assert (status.requested, status.active) == (True, False)
+    assert "No module named" in status.detail
+    assert sys.executable in status.detail
+
+
+def test_a_truststore_that_fails_to_install_itself_is_reported(monkeypatch):
+    """It raises on unsupported platforms; start-up must survive it."""
+    from app.core import trust
+
+    monkeypatch.setattr(trust.settings, "use_system_trust_store", True)
+    _reset_trust(monkeypatch, trust, requested=True)
+
+    def boom():
+        raise RuntimeError("unsupported platform")
+
+    _fake_truststore(monkeypatch, boom)
+    status = trust.apply_system_trust_store()
+
+    assert (status.requested, status.active) == (True, False)
+    assert "unsupported platform" in status.detail

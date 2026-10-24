@@ -20,7 +20,7 @@ from app.core.config import get_settings
 from app.core.trust import apply_system_trust_store
 
 # Before storage imports boto3 and builds an SSL context.
-_using_os_trust = apply_system_trust_store()
+_trust = apply_system_trust_store()
 
 from app.core.storage import StorageError, get_object_store  # noqa: E402
 
@@ -32,22 +32,17 @@ TEST_KEY = f"products/storage-check/{uuid.uuid4()}.txt"
 TEST_BODY = b"beadstore storage check"
 
 
-def trust_store_state() -> str:
-    """How TLS is being verified, as a line for the configuration block.
-
-    Shown because the alternative is a single log warning above the output,
-    which is easy to scroll past — and then the TLS advice below reads as if
-    nothing had been configured at all.
-    """
-    if not settings.use_system_trust_store:
-        return "false (using Python's own CA bundle)"
-    if _using_os_trust:
-        return "true (active — verifying against the OS certificate store)"
-    return "true  <-- REQUESTED BUT truststore IS NOT INSTALLED, so it is NOT in effect"
-
-
 def describe_configuration() -> None:
-    print(f"USE_SYSTEM_TRUST_STORE {trust_store_state()}")
+    # The interpreter, because "installed but not importable" almost always
+    # means installed under a different Python than the one running this.
+    print(f"PYTHON                {sys.executable}")
+    if not _trust.requested:
+        print("USE_SYSTEM_TRUST_STORE false (using Python's own CA bundle)")
+    elif _trust.active:
+        print(f"USE_SYSTEM_TRUST_STORE true (active) — {_trust.detail}")
+    else:
+        print("USE_SYSTEM_TRUST_STORE true  <-- REQUESTED BUT NOT IN EFFECT")
+        print(f"                      {_trust.detail}")
     backend = (settings.storage_backend or "local").lower()
     print(f"STORAGE_BACKEND       {backend}")
     if backend == "local":
@@ -78,21 +73,28 @@ and run this again:
 
   pip install -r requirements.txt"""
 
-TRUSTSTORE_NOT_INSTALLED_ADVICE = """USE_SYSTEM_TRUST_STORE is on, which is the right setting for this machine,
-but the truststore package isn't installed — so it fell back to Python's own
-CA bundle and the certificate check failed exactly as before.
+TRUSTSTORE_NOT_ACTIVE_ADVICE = """USE_SYSTEM_TRUST_STORE is on, which is the right setting for this machine,
+but it did not take effect, so TLS fell back to Python's own CA bundle and
+failed exactly as before. The reason:
 
-Install it and run this again:
+  {detail}
 
-  pip install truststore
+If you believe truststore IS installed, it is most likely installed for a
+different Python than the one running this. Install it for THIS interpreter
+specifically:
 
-On a machine where HTTPS is intercepted, pip needs the same bypass it always
-does here:
+  "{python}" -m pip install truststore
 
-  pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org truststore
+adding the usual bypass if pip itself is blocked by the interception:
 
-Nothing else in the configuration above needs changing, and there's no need to
-put the CA bundle settings back."""
+  "{python}" -m pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org truststore
+
+Check which one it landed under with:
+
+  "{python}" -c "import truststore, sys; print(sys.executable); print(truststore.__file__)"
+
+Nothing else in the configuration above needs changing, and there is no need
+to put the CA bundle settings back."""
 
 TLS_INTERCEPTION_ADVICE = """This is a TLS trust problem on THIS MACHINE, not a problem with the
 configuration above, the bucket, or the credentials. Something local is
@@ -178,8 +180,10 @@ def advice_for(exc: Exception) -> str:
         # was asked for and simply isn't installed — that reads as "your
         # configuration is wrong" when the configuration is right and one
         # package is missing.
-        if settings.use_system_trust_store and not _using_os_trust:
-            return TRUSTSTORE_NOT_INSTALLED_ADVICE
+        if _trust.requested and not _trust.active:
+            return TRUSTSTORE_NOT_ACTIVE_ADVICE.format(
+                detail=_trust.detail, python=sys.executable
+            )
         return TLS_INTERCEPTION_ADVICE
     for status_prefix, advice in STATUS_ADVICE.items():
         if status_prefix in message:
