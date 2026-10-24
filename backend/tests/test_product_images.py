@@ -5,6 +5,7 @@ the real LocalObjectStore rather than a mock — the adapter is the part most
 worth exercising, since the Supabase one can't be reached from here.
 """
 import base64
+import sys
 import io
 import uuid
 
@@ -527,3 +528,69 @@ def test_image_routes_do_not_shadow_the_product_detail_route(client, auth_header
 def test_image_endpoints_require_authentication(client, method, path):
     kwargs = {} if method in ("get", "delete") else {"json": {}}
     assert getattr(client, method)(path, **kwargs).status_code in (401, 403)
+
+
+def test_ca_bundle_setting_is_passed_to_the_s3_client(monkeypatch):
+    """A machine that intercepts HTTPS needs its own trust bundle.
+
+    Configured as a setting rather than botocore's AWS_CA_BUNDLE because
+    .env is read by pydantic-settings and never exported to os.environ, so
+    that variable placed there would be silently ignored.
+    """
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+    fake_boto3 = type("boto3", (), {"client": staticmethod(lambda *a, **k: FakeClient(*a, **k))})
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+        ca_bundle="/etc/ssl/custom-roots.pem",
+    )
+    store.client
+    assert captured["verify"] == "/etc/ssl/custom-roots.pem"
+    # Path-style addressing, or Supabase resolves the bucket as a subdomain.
+    assert captured["config"].s3["addressing_style"] == "path"
+
+
+def test_without_a_ca_bundle_the_default_trust_store_is_used(monkeypatch):
+    """verify must never be False — that would travel to production."""
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+    fake_boto3 = type("boto3", (), {"client": staticmethod(lambda *a, **k: FakeClient(*a, **k))})
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+    store.client
+    assert captured["verify"] is None
+
+
+def test_the_factory_forwards_the_ca_bundle(monkeypatch):
+    monkeypatch.setattr(settings, "storage_backend", "s3")
+    monkeypatch.setattr(settings, "storage_s3_endpoint_url", "https://example.supabase.co/storage/v1/s3")
+    monkeypatch.setattr(settings, "storage_s3_bucket", "product-images")
+    monkeypatch.setattr(settings, "storage_s3_access_key_id", "key")
+    monkeypatch.setattr(settings, "storage_s3_secret_access_key", "secret")
+    monkeypatch.setattr(settings, "storage_s3_ca_bundle", "/etc/ssl/custom-roots.pem")
+    storage.get_object_store.cache_clear()
+
+    store = storage.get_object_store()
+    assert store._ca_bundle == "/etc/ssl/custom-roots.pem"
+    storage.get_object_store.cache_clear()

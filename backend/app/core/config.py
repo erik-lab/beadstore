@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     storage_s3_bucket: str = ""
     storage_s3_access_key_id: str = ""
     storage_s3_secret_access_key: str = ""
+    # Path to a CA bundle for the S3 connection, for a machine where HTTPS is
+    # intercepted (corporate proxy, VPN, antivirus TLS scanning) and Python
+    # doesn't trust the substituted certificate. A setting rather than
+    # botocore's AWS_CA_BUNDLE environment variable because this project's
+    # configuration lives in .env, which pydantic-settings reads into
+    # Settings without exporting to os.environ — so AWS_CA_BUNDLE put there
+    # would be silently ignored. Empty means use the default trust store.
+    storage_s3_ca_bundle: str = ""
     # Set only for a public bucket: images are then served straight from the
     # CDN instead of streaming through this process.
     storage_public_base_url: str = ""

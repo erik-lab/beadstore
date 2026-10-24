@@ -112,8 +112,12 @@ certificate store instead of its own bundled one).
 intercepting HTTPS (corporate proxy, VPN, or antivirus HTTPS scanning) and presenting its own
 certificate. It affects outbound calls to Supabase Storage, Anthropic and Etsy, not only `pip`.
 `python -m scripts.check_storage` prints the full fix when it hits this. The short version: export
-the roots your machine already trusts to a PEM and set `AWS_CA_BUNDLE` to it in `backend/.env`, or
-`pip install truststore` to have Python use the OS trust store for every library at once. Never
+the roots your machine already trusts to a PEM, then set `STORAGE_S3_CA_BUNDLE` in `backend/.env`
+for object storage and the real environment variable `SSL_CERT_FILE` for the httpx-based callers
+(Anthropic, Etsy) — or `pip install truststore` to have Python use the OS trust store for every
+library at once. Note that `.env` is read by pydantic-settings into its own object and never
+exported to `os.environ`, so library-standard names like `AWS_CA_BUNDLE` placed there are silently
+ignored; that is why storage takes an explicit setting. Never
 disable certificate verification — that setting would follow the code into production, where the
 interception doesn't exist and the risk is real. A deployed server normally doesn't see this at
 all, so it blocks local testing rather than deploying.

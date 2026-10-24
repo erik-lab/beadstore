@@ -142,6 +142,7 @@ class S3ObjectStore(ObjectStore):
         access_key_id: str,
         secret_access_key: str,
         public_base_url: str = "",
+        ca_bundle: str = "",
     ):
         self.bucket = bucket
         self.public_base_url = public_base_url.rstrip("/")
@@ -149,6 +150,7 @@ class S3ObjectStore(ObjectStore):
         self._region = region
         self._access_key_id = access_key_id
         self._secret_access_key = secret_access_key
+        self._ca_bundle = ca_bundle
         self._client = None
 
     @property
@@ -172,6 +174,11 @@ class S3ObjectStore(ObjectStore):
                 # virtual-host style boto3 prefers would resolve the bucket
                 # as a subdomain and fail.
                 config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 3}),
+                # A CA bundle when one is configured, otherwise botocore's
+                # default trust store. Never False: disabling verification
+                # would travel to production, where the local interception
+                # this works around doesn't exist and the risk is real.
+                verify=self._ca_bundle or None,
             )
         return self._client
 
@@ -241,6 +248,7 @@ def get_object_store() -> ObjectStore:
             access_key_id=settings.storage_s3_access_key_id,
             secret_access_key=settings.storage_s3_secret_access_key,
             public_base_url=settings.storage_public_base_url,
+            ca_bundle=settings.storage_s3_ca_bundle,
         )
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

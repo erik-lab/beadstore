@@ -44,6 +44,12 @@ def describe_configuration() -> None:
         print(f"STORAGE_S3_ACCESS_KEY {key_id[:4] + '...' if key_id else '(not set)'}")
         print(f"                      secret {'set' if settings.storage_s3_secret_access_key else 'NOT SET'}")
         print(f"STORAGE_PUBLIC_BASE   {settings.storage_public_base_url or '(not set — bytes served by the API)'}")
+        bundle = settings.storage_s3_ca_bundle
+        if bundle:
+            exists = Path(bundle).is_file()
+            print(f"STORAGE_S3_CA_BUNDLE  {bundle}{'' if exists else '   <-- FILE NOT FOUND'}")
+        else:
+            print("STORAGE_S3_CA_BUNDLE  (not set — using the default trust store)")
     print()
 
 
@@ -61,10 +67,9 @@ cause as pip needing --trusted-host.
 A deployed server almost certainly won't see this, so it does not block
 deploying — only testing from here.
 
-To fix it locally, point the AWS SDK at a bundle that includes the
-intercepting root. botocore reads AWS_CA_BUNDLE, so no code change is needed.
-Exporting every root your machine already trusts is the reliable way to get
-one, from PowerShell:
+Fix it by pointing the S3 connection at a bundle that includes the
+intercepting root. Export every root your machine already trusts — which is
+why your browser is happy with these sites — from PowerShell:
 
   $out = "$HOME\\windows-roots.pem"
   Get-ChildItem Cert:\\LocalMachine\\Root, Cert:\\CurrentUser\\Root | ForEach-Object {
@@ -73,14 +78,27 @@ one, from PowerShell:
     "-----END CERTIFICATE-----"
   } | Set-Content $out
 
-Then add to backend/.env:
+Then add the path to backend/.env, using a forward slash or a doubled
+backslash so it isn't read as an escape:
 
-  AWS_CA_BUNDLE=C:\\Users\\<you>\\windows-roots.pem
+  STORAGE_S3_CA_BUNDLE=C:/Users/<you>/windows-roots.pem
 
-Alternatively `pip install truststore` and have Python use the OS trust store
-directly, which fixes this for every library at once rather than just the AWS
-SDK. Do NOT disable certificate verification — that would be carried into
-production, where the interception doesn't exist and the risk is real."""
+Note it is NOT botocore's usual AWS_CA_BUNDLE: this project's .env is read by
+pydantic-settings into its own Settings object and never exported to the
+process environment, so AWS_CA_BUNDLE placed there would be silently ignored.
+(Setting it as a real machine environment variable would also work.)
+
+The same interception will affect the Anthropic calls behind Import Inventory
+and, later, Etsy. Those go through httpx rather than botocore, and read the
+standard SSL_CERT_FILE variable — which has to be a real environment
+variable, not a line in .env:
+
+  setx SSL_CERT_FILE "C:\\Users\\<you>\\windows-roots.pem"
+
+Or `pip install truststore` and have Python adopt the OS trust store for
+every library at once. Do NOT disable certificate verification — that choice
+would be carried into production, where the interception doesn't exist and
+the risk is real."""
 
 CONFIGURATION_ADVICE = """Common causes:
   - the bucket doesn't exist yet (create it in Supabase first)
