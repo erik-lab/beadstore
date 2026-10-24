@@ -2,7 +2,12 @@ __pycache__/
 *.pyc
 .venv/
 *.db
+# Every env file EXCEPT the committed examples. A bare `.env` rule matches
+# only that exact name, so `.env.local` and friends were being tracked —
+# which is how a storage key or a database password ends up in a commit.
 .env
+.env.*
+!.env.example
 # Locally uploaded product photos (STORAGE_BACKEND=local).
 backend/var/
 node_modules/
