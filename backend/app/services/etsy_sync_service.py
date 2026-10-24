@@ -1,3 +1,4 @@
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -43,6 +44,122 @@ def _access_token_for(db: Session, account: EtsyAccount) -> str:
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Etsy access for {account.shop_name or account.shop_id} has expired. Reconnect the shop.",
         )
+
+
+def shipping_profile_options(db: Session) -> list[dict]:
+    """The connected shop's shipping profiles as {id, label} for a dropdown."""
+    account = get_active_account_or_error(db)
+    profiles = etsy_service.get_shop_shipping_profiles(account.shop_id, _access_token_for(db, account))
+    return [
+        {
+            "id": str(profile.get("shipping_profile_id")),
+            "label": profile.get("title") or f"Profile {profile.get('shipping_profile_id')}",
+        }
+        for profile in profiles
+        if profile.get("shipping_profile_id") is not None
+    ]
+
+
+def return_policy_options(db: Session) -> list[dict]:
+    account = get_active_account_or_error(db)
+    policies = etsy_service.get_shop_return_policies(account.shop_id, _access_token_for(db, account))
+    options = []
+    for policy in policies:
+        policy_id = policy.get("return_policy_id")
+        if policy_id is None:
+            continue
+        # Etsy's return policies have no title — describe them by their terms
+        # so two policies on one shop are tellable apart.
+        if policy.get("accepts_returns"):
+            label = f"Accepts returns within {policy.get('return_deadline', '?')} days"
+            if policy.get("accepts_exchanges"):
+                label += ", exchanges allowed"
+        else:
+            label = "No returns or exchanges"
+        options.append({"id": str(policy_id), "label": label})
+    return options
+
+
+# Etsy's seller taxonomy is thousands of nodes and effectively static, so it's
+# fetched once and held in memory rather than re-pulled for every keystroke in
+# the listing form's search box.
+_TAXONOMY_CACHE: dict = {"fetched_at": 0.0, "options": []}
+_TAXONOMY_TTL_SECONDS = 24 * 60 * 60
+
+
+def _flatten_taxonomy(nodes: list[dict], prefix: str = "") -> list[dict]:
+    """Depth-first flatten into {id, label} with the full category path.
+
+    The path is what makes a node pickable: "Beads" alone appears in several
+    branches, where "Craft Supplies & Tools > Beads > Glass Beads" doesn't.
+    """
+    flattened: list[dict] = []
+    for node in nodes:
+        name = node.get("name") or ""
+        label = f"{prefix} > {name}" if prefix else name
+        node_id = node.get("id")
+        if node_id is not None:
+            flattened.append({"id": str(node_id), "label": label})
+        children = node.get("children") or []
+        if children:
+            flattened.extend(_flatten_taxonomy(children, label))
+    return flattened
+
+
+def taxonomy_options(db: Session, search: str | None = None, limit: int = 50) -> list[dict]:
+    """Searchable Etsy taxonomy categories as {id, label}.
+
+    Searching server-side against the cached tree keeps the response small —
+    handing the browser every node would be megabytes.
+    """
+    now = time.time()
+    if not _TAXONOMY_CACHE["options"] or now - _TAXONOMY_CACHE["fetched_at"] > _TAXONOMY_TTL_SECONDS:
+        account = get_active_account_or_error(db)
+        nodes = etsy_service.get_seller_taxonomy_nodes(_access_token_for(db, account))
+        _TAXONOMY_CACHE["options"] = _flatten_taxonomy(nodes)
+        _TAXONOMY_CACHE["fetched_at"] = now
+
+    options = _TAXONOMY_CACHE["options"]
+    if search:
+        needle = _search_stem(search)
+        # Rank a match on the node's own name above one buried in its path, so
+        # searching "beads" offers the Beads categories before everything
+        # filed under them — a search for "cabochons" matches every child of
+        # "Beads, Gems & Cabochons" too, and the one you meant should be top.
+        def sort_key(option: dict) -> tuple[int, int, int, str]:
+            leaf = option["label"].rsplit(" > ", 1)[-1].lower()
+            return (
+                # The category's own name starting with what was typed is the
+                # strongest signal, then merely containing it, then a match
+                # only somewhere in its ancestry.
+                0 if leaf.startswith(needle) else 1,
+                0 if needle in leaf else 1,
+                # Shortest *leaf* among equals: searching "cabochons" should
+                # offer "Cabochons" before "Beads, Gems & Cabochons", which
+                # ranking by full path length gets backwards.
+                len(leaf),
+                option["label"],
+            )
+
+        options = sorted(
+            (option for option in options if needle in option["label"].lower()), key=sort_key
+        )
+    return options[:limit]
+
+
+def _search_stem(search: str) -> str:
+    """Drop a trailing plural so "beads" also finds "Beaded" and "Beading".
+
+    Matched against the whole path, which lets "jewelry findings" work, and
+    crudely de-pluralized because Etsy's category names are inconsistent
+    about it — a reviewer typing the word they'd use shouldn't have to guess
+    Etsy's. Left alone for short words, where chopping a letter does more
+    harm than good.
+    """
+    needle = search.strip().lower()
+    if len(needle) > 3 and needle.endswith("s"):
+        return needle[:-1]
+    return needle
 
 
 def get_or_create_sync_row(db: Session, catalog_listing_id: uuid.UUID, shop_id: str) -> EtsyListingSync:

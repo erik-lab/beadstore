@@ -97,6 +97,16 @@ export interface EtsyListingSync {
   last_error: string | null;
 }
 
+/**
+ * A pickable Etsy-side value — shipping profile, return policy or taxonomy
+ * category. The id is Etsy's own numeric id as a string; these can only come
+ * from the connected shop, which is why they're fetched rather than typed.
+ */
+export interface EtsyOption {
+  id: string;
+  label: string;
+}
+
 export interface EtsyPullResult {
   created: number;
   skipped_unmapped: number;

@@ -175,6 +175,88 @@ def get_user_shops(user_id: str, token: dict = Depends(_require_access_token), a
     return {"count": 1, "results": [shop]}
 
 
+@router.get("/v3/application/shops/{shop_id}/shipping-profiles")
+def get_shop_shipping_profiles(
+    shop_id: str, token: dict = Depends(_require_access_token), api_key: str = Depends(_require_api_key)
+):
+    # Two profiles, because one wouldn't show whether the dropdown is really
+    # letting you choose. Shapes match Etsy's getShopShippingProfiles.
+    return {
+        "count": 2,
+        "results": [
+            {"shipping_profile_id": 901, "title": "Standard US", "processing_days_min": 1, "processing_days_max": 3},
+            {"shipping_profile_id": 902, "title": "US + International", "processing_days_min": 1, "processing_days_max": 5},
+        ],
+    }
+
+
+@router.get("/v3/application/shops/{shop_id}/policies/return")
+def get_shop_return_policies(
+    shop_id: str, token: dict = Depends(_require_access_token), api_key: str = Depends(_require_api_key)
+):
+    # Etsy's return policies carry no title, only terms — which is why the
+    # back office builds a label out of them.
+    return {
+        "count": 2,
+        "results": [
+            {"return_policy_id": 701, "accepts_returns": True, "accepts_exchanges": True, "return_deadline": 30},
+            {"return_policy_id": 702, "accepts_returns": False, "accepts_exchanges": False, "return_deadline": None},
+        ],
+    }
+
+
+@router.get("/v3/application/seller-taxonomy/nodes")
+def get_seller_taxonomy_nodes(api_key: str = Depends(_require_api_key)):
+    # A small slice of the real tree, nested, with "Beads" appearing in two
+    # branches — the case that makes a bare node name useless and the full
+    # path necessary.
+    return {
+        "count": 2,
+        "results": [
+            {
+                "id": 1,
+                "name": "Craft Supplies & Tools",
+                "level": 1,
+                "children": [
+                    {
+                        "id": 11,
+                        "name": "Beads, Gems & Cabochons",
+                        "level": 2,
+                        "children": [
+                            {"id": 111, "name": "Beads", "level": 3, "children": []},
+                            {"id": 112, "name": "Cabochons", "level": 3, "children": []},
+                            {"id": 113, "name": "Charms & Pendants", "level": 3, "children": []},
+                        ],
+                    },
+                    {
+                        "id": 12,
+                        "name": "Jewelry & Beading Supplies",
+                        "level": 2,
+                        "children": [
+                            {"id": 121, "name": "Jewelry Findings", "level": 3, "children": []},
+                            {"id": 122, "name": "Stringing Materials", "level": 3, "children": []},
+                        ],
+                    },
+                ],
+            },
+            {
+                "id": 2,
+                "name": "Jewelry",
+                "level": 1,
+                "children": [
+                    {
+                        "id": 21,
+                        "name": "Necklaces",
+                        "level": 2,
+                        "children": [{"id": 211, "name": "Beaded Necklaces", "level": 3, "children": []}],
+                    },
+                    {"id": 22, "name": "Bracelets", "level": 2, "children": []},
+                ],
+            },
+        ],
+    }
+
+
 @router.post("/v3/application/shops/{shop_id}/listings", status_code=201)
 async def create_draft_listing(
     shop_id: str,

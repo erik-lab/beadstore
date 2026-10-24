@@ -314,3 +314,74 @@ def test_webhook_triggers_pull_with_valid_signature(client, auth_headers):
     )
     assert resp.status_code == 200
     assert resp.json()["created"] == 1
+
+
+def test_shipping_profile_and_return_policy_dropdowns(client, auth_headers):
+    """The Etsy-only required IDs have to be pickable, not typed from memory."""
+    _connect_shop(client, auth_headers)
+
+    profiles = client.get("/api/v1/etsy/shipping-profiles", headers=auth_headers)
+    assert profiles.status_code == 200
+    assert profiles.json() == [
+        {"id": "901", "label": "Standard US"},
+        {"id": "902", "label": "US + International"},
+    ]
+
+    policies = client.get("/api/v1/etsy/return-policies", headers=auth_headers)
+    assert policies.status_code == 200
+    # Etsy gives return policies no title, so the label is built from terms.
+    assert policies.json() == [
+        {"id": "701", "label": "Accepts returns within 30 days, exchanges allowed"},
+        {"id": "702", "label": "No returns or exchanges"},
+    ]
+
+
+def test_taxonomy_search_returns_full_category_paths(client, auth_headers):
+    _connect_shop(client, auth_headers)
+
+    resp = client.get("/api/v1/etsy/taxonomy?search=beads", headers=auth_headers)
+    assert resp.status_code == 200
+    options = resp.json()
+
+    labels = [option["label"] for option in options]
+    # The path is the point: "Beads" alone appears in more than one branch.
+    assert "Craft Supplies & Tools > Beads, Gems & Cabochons > Beads" in labels
+    # "beads" has to reach "Beaded Necklaces" too — Etsy's category names are
+    # inconsistent about plurals and word forms, and the reviewer types the
+    # word they'd use, not Etsy's.
+    assert "Jewelry > Necklaces > Beaded Necklaces" in labels
+    # A match on the node's own name outranks one buried in an ancestor path,
+    # and the tightest of those comes first.
+    assert labels[0] == "Craft Supplies & Tools > Beads, Gems & Cabochons > Beads"
+
+    by_label = {option["label"]: option["id"] for option in options}
+    assert by_label["Craft Supplies & Tools > Beads, Gems & Cabochons > Beads"] == "111"
+
+
+def test_taxonomy_search_narrows_and_limit_applies(client, auth_headers):
+    _connect_shop(client, auth_headers)
+
+    unfiltered = client.get("/api/v1/etsy/taxonomy", headers=auth_headers).json()
+    assert len(unfiltered) > 5
+
+    # Matching the whole path means a search for "cabochons" also catches
+    # everything filed under "Beads, Gems & Cabochons" — so what matters is
+    # that the node actually named Cabochons ranks first.
+    narrowed = client.get("/api/v1/etsy/taxonomy?search=cabochons", headers=auth_headers).json()
+    assert narrowed[0]["label"] == "Craft Supplies & Tools > Beads, Gems & Cabochons > Cabochons"
+    assert all("cabochon" in o["label"].lower() for o in narrowed)
+
+    capped = client.get("/api/v1/etsy/taxonomy?limit=2", headers=auth_headers).json()
+    assert len(capped) == 2
+
+
+def test_option_lookups_need_a_connected_shop(client, auth_headers):
+    for path in ("/api/v1/etsy/shipping-profiles", "/api/v1/etsy/return-policies"):
+        resp = client.get(path, headers=auth_headers)
+        assert resp.status_code == 409
+        assert "No active Etsy shop" in resp.json()["detail"]
+
+
+def test_option_lookups_require_staff_auth(client):
+    for path in ("/api/v1/etsy/shipping-profiles", "/api/v1/etsy/return-policies", "/api/v1/etsy/taxonomy"):
+        assert client.get(path).status_code == 401

@@ -10,7 +10,7 @@ import html as html_lib
 import json
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,7 @@ from app.schemas.etsy import (
     EtsyListingSyncRead,
     EtsyPullResult,
     EtsyPushRequest,
+    EtsyOption,
     EtsySimulateSaleRequest,
 )
 from app.services import etsy_service, etsy_sync_service
@@ -141,6 +142,32 @@ def oauth_callback(
         return _callback_page("Connection failed", str(exc), ok=False)
 
     return _callback_page("Etsy shop connected", "You can close this window.", ok=True)
+
+
+@router.get("/shipping-profiles", response_model=list[EtsyOption], dependencies=[Depends(get_current_user)])
+def list_shipping_profiles(db: Session = Depends(get_db)):
+    """The connected shop's shipping profiles, for the push form's dropdown.
+
+    These three lookups exist so the Etsy-only required fields can be picked
+    rather than typed: their IDs are opaque numbers that only mean anything
+    inside the live shop, so there's no way to know them from the back office.
+    """
+    return etsy_sync_service.shipping_profile_options(db)
+
+
+@router.get("/return-policies", response_model=list[EtsyOption], dependencies=[Depends(get_current_user)])
+def list_return_policies(db: Session = Depends(get_db)):
+    return etsy_sync_service.return_policy_options(db)
+
+
+@router.get("/taxonomy", response_model=list[EtsyOption], dependencies=[Depends(get_current_user)])
+def list_taxonomy(
+    db: Session = Depends(get_db),
+    search: str | None = None,
+    limit: int = Query(default=50, le=200),
+):
+    """Etsy's seller taxonomy, searched server-side against a cached tree."""
+    return etsy_sync_service.taxonomy_options(db, search=search, limit=limit)
 
 
 @router.post("/listings/{catalog_listing_id}/push", response_model=EtsyListingSyncRead, dependencies=[Depends(get_current_user)])

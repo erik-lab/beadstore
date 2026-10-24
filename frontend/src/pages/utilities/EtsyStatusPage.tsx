@@ -2,7 +2,13 @@ import { useState } from "react";
 import { api, ApiError } from "../../lib/apiClient";
 import { useFetch } from "../../lib/useFetch";
 import { connectEtsyShop } from "../../lib/etsyConnect";
-import type { CatalogListing, EtsyAccount, EtsyListingSync, EtsyPullResult } from "../../lib/types";
+import type {
+  CatalogListing,
+  EtsyAccount,
+  EtsyListingSync,
+  EtsyOption,
+  EtsyPullResult,
+} from "../../lib/types";
 import { Loading, EmptyState, ErrorState } from "../../components/States";
 import { StatusBadge } from "../../components/StatusBadge";
 
@@ -11,6 +17,25 @@ import { StatusBadge } from "../../components/StatusBadge";
 // listing, pull orders) without needing real Etsy credentials yet (points
 // at the built-in simulator locally). Easy to delete: this file, its route,
 // its Utilities card.
+
+const WHEN_MADE_OTHER = "__other__";
+
+// Etsy's `when_made` is a fixed enum and a wrong value fails the push. These
+// are the values that published sources agree on; the buckets covering the
+// 2000s differ between them, and the most recent bucket shifts over time, so
+// those go through "Other" rather than being guessed at here. `made_to_order`
+// is what Patti's own pieces will almost always be.
+const WHEN_MADE_OPTIONS = [
+  { value: "made_to_order", label: "Made to order" },
+  { value: "2020_2022", label: "2020-2022" },
+  { value: "2010_2019", label: "2010-2019" },
+  { value: "1990s", label: "1990s" },
+  { value: "1980s", label: "1980s" },
+  { value: "1970s", label: "1970s" },
+  { value: "1960s", label: "1960s" },
+  { value: "1950s", label: "1950s" },
+  { value: "before_1700", label: "Before 1700" },
+];
 
 export function EtsyStatusPage() {
   const accounts = useFetch(() => api.get<EtsyAccount[]>("/etsy/accounts"), []);
@@ -24,11 +49,36 @@ export function EtsyStatusPage() {
   const [pullError, setPullError] = useState<string | null>(null);
 
   const [listingId, setListingId] = useState("");
-  const [taxonomyId, setTaxonomyId] = useState("1");
-  const [shippingProfileId, setShippingProfileId] = useState("1");
-  const [returnPolicyId, setReturnPolicyId] = useState("1");
+  const [taxonomyId, setTaxonomyId] = useState("");
+  const [shippingProfileId, setShippingProfileId] = useState("");
+  const [returnPolicyId, setReturnPolicyId] = useState("");
   const [whoMade, setWhoMade] = useState("i_did");
   const [whenMade, setWhenMade] = useState("made_to_order");
+  const [taxonomySearch, setTaxonomySearch] = useState("");
+
+  // Fetched from the connected shop rather than typed: these are Etsy's own
+  // numeric IDs, which can't be known from inside the back office.
+  const hasShop = (accounts.data ?? []).some((a) => a.status === "active");
+  const shippingProfiles = useFetch(
+    () => (hasShop ? api.get<EtsyOption[]>("/etsy/shipping-profiles") : Promise.resolve([])),
+    [hasShop],
+  );
+  const returnPolicies = useFetch(
+    () => (hasShop ? api.get<EtsyOption[]>("/etsy/return-policies") : Promise.resolve([])),
+    [hasShop],
+  );
+  // Searched server-side against a cached copy of Etsy's taxonomy — the full
+  // tree is far too large to hand to the browser.
+  const taxonomy = useFetch(
+    () =>
+      hasShop
+        ? api.get<EtsyOption[]>(
+            `/etsy/taxonomy?limit=50${taxonomySearch.trim() ? `&search=${encodeURIComponent(taxonomySearch.trim())}` : ""}`,
+          )
+        : Promise.resolve([]),
+    [hasShop, taxonomySearch],
+  );
+  const optionsError = shippingProfiles.error ?? returnPolicies.error ?? taxonomy.error;
   const [pushResult, setPushResult] = useState<EtsyListingSync | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
@@ -79,6 +129,19 @@ export function EtsyStatusPage() {
     setPushResult(null);
     if (!listingId) {
       setPushError("Choose a listing to push.");
+      return;
+    }
+    // These used to default to a hardcoded "1", which only worked against the
+    // simulator. Empty now, so they have to be checked — Number("") is 0, and
+    // Etsy would reject that with a far less helpful message.
+    const missing = [
+      !taxonomyId && "an Etsy category",
+      !shippingProfileId && "a shipping profile",
+      !returnPolicyId && "a return policy",
+      !whenMade.trim() && "when it was made",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      setPushError(`Etsy needs ${missing.join(", ")} before this can be pushed.`);
       return;
     }
     setPushing(true);
@@ -187,26 +250,93 @@ export function EtsyStatusPage() {
               ))}
             </select>
           </label>
+          {/* These three are Etsy's own numeric IDs, which mean nothing
+              outside the live shop — so they're fetched from it rather than
+              typed from memory. They need a connected shop to load. */}
+          {optionsError && <div className="alert alert-warn">{optionsError}</div>}
+
+          <label>
+            Etsy category
+            <input
+              placeholder="Search Etsy's categories, e.g. beads"
+              value={taxonomySearch}
+              onChange={(e) => setTaxonomySearch(e.target.value)}
+            />
+            <select value={taxonomyId} onChange={(e) => setTaxonomyId(e.target.value)}>
+              <option value="">
+                {taxonomy.loading ? "Loading..." : "Select a category..."}
+              </option>
+              {(taxonomy.data ?? []).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div className="line-row">
-            <input placeholder="Taxonomy ID" value={taxonomyId} onChange={(e) => setTaxonomyId(e.target.value)} />
-            <input
-              placeholder="Shipping Profile ID"
-              value={shippingProfileId}
-              onChange={(e) => setShippingProfileId(e.target.value)}
-            />
-            <input
-              placeholder="Return Policy ID"
-              value={returnPolicyId}
-              onChange={(e) => setReturnPolicyId(e.target.value)}
-            />
+            <label>
+              Shipping profile
+              <select
+                value={shippingProfileId}
+                onChange={(e) => setShippingProfileId(e.target.value)}
+              >
+                <option value="">
+                  {shippingProfiles.loading ? "Loading..." : "Select a profile..."}
+                </option>
+                {(shippingProfiles.data ?? []).map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Return policy
+              <select value={returnPolicyId} onChange={(e) => setReturnPolicyId(e.target.value)}>
+                <option value="">
+                  {returnPolicies.loading ? "Loading..." : "Select a policy..."}
+                </option>
+                {(returnPolicies.data ?? []).map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="line-row">
-            <select value={whoMade} onChange={(e) => setWhoMade(e.target.value)}>
-              <option value="i_did">I did</option>
-              <option value="someone_else">Someone else</option>
-              <option value="collective">A member of my shop</option>
-            </select>
-            <input placeholder="When made (e.g. made_to_order)" value={whenMade} onChange={(e) => setWhenMade(e.target.value)} />
+            <label>
+              Who made it
+              <select value={whoMade} onChange={(e) => setWhoMade(e.target.value)}>
+                <option value="i_did">I did</option>
+                <option value="someone_else">Someone else</option>
+                <option value="collective">A member of my shop</option>
+              </select>
+            </label>
+            <label>
+              When made
+              <select
+                value={WHEN_MADE_OPTIONS.some((o) => o.value === whenMade) ? whenMade : WHEN_MADE_OTHER}
+                onChange={(e) =>
+                  setWhenMade(e.target.value === WHEN_MADE_OTHER ? "" : e.target.value)
+                }
+              >
+                {WHEN_MADE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                <option value={WHEN_MADE_OTHER}>Other — type the exact Etsy value...</option>
+              </select>
+              {!WHEN_MADE_OPTIONS.some((o) => o.value === whenMade) && (
+                <input
+                  placeholder="e.g. 2003_2009"
+                  value={whenMade}
+                  onChange={(e) => setWhenMade(e.target.value)}
+                />
+              )}
+            </label>
           </div>
           <button className="btn-primary" onClick={handlePush} disabled={pushing}>
             {pushing ? "Pushing..." : "Push to Etsy"}

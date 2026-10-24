@@ -7,6 +7,16 @@ from app.models.enums import EtsyAccountStatus, EtsySyncStatus
 from app.schemas.common import ORMModel
 
 
+class EtsyOption(BaseModel):
+    """One pickable Etsy-side value — a shipping profile, return policy or
+    taxonomy category. The id is Etsy's own numeric id, as a string, and the
+    label is what the dropdown shows.
+    """
+
+    id: str
+    label: str
+
+
 class EtsyAccountRead(ORMModel):
     id: uuid.UUID
     shop_id: str

@@ -137,6 +137,50 @@ def get_user_shops(user_id: str, access_token: str) -> list[dict]:
     return resp.json().get("results", [])
 
 
+def get_shop_shipping_profiles(shop_id: str, access_token: str) -> list[dict]:
+    """The shop's own shipping profiles, for the listing form's dropdown.
+
+    Note the hyphen: Etsy's path is `/shipping-profiles`, not
+    `/shipping/profiles`.
+    """
+    resp = httpx.get(
+        f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/shipping-profiles",
+        headers=_headers(access_token),
+        timeout=15,
+    )
+    if not resp.is_success:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Etsy request failed ({resp.status_code}).")
+    return resp.json().get("results", [])
+
+
+def get_shop_return_policies(shop_id: str, access_token: str) -> list[dict]:
+    resp = httpx.get(
+        f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/policies/return",
+        headers=_headers(access_token),
+        timeout=15,
+    )
+    if not resp.is_success:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Etsy request failed ({resp.status_code}).")
+    return resp.json().get("results", [])
+
+
+def get_seller_taxonomy_nodes(access_token: str) -> list[dict]:
+    """Etsy's full seller taxonomy tree.
+
+    Thousands of nodes and effectively static, so the caller caches it — see
+    `taxonomy_options`. Public data: it needs the API key, not a seller's
+    authorization, but the token is passed anyway to keep one header helper.
+    """
+    resp = httpx.get(
+        f"{settings.etsy_api_base_url}/v3/application/seller-taxonomy/nodes",
+        headers=_headers(access_token),
+        timeout=30,
+    )
+    if not resp.is_success:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Etsy request failed ({resp.status_code}).")
+    return resp.json().get("results", [])
+
+
 def create_draft_listing(shop_id: str, access_token: str, payload: dict) -> dict:
     resp = httpx.post(
         f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/listings",
