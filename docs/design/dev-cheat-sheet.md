@@ -20,6 +20,17 @@ cd backend
 Skipping these is the usual cause of an import error or a "relation does not exist" right after
 a pull.
 
+If pip dies with `SSL: CERTIFICATE_VERIFY_FAILED` / "unable to get local issuer certificate",
+that's local HTTPS interception, not a broken venv. Bypass verification for PyPI's hosts:
+
+```bash
+pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+```
+
+`openpyxl` is the only dependency that can fail without breaking the app — it's imported lazily,
+so `.xlsx` uploads return a 503 telling you to install it while every other Import Inventory
+format (CSV, pasted text, dictation, .docx, PDF, photos) keeps working.
+
 ## Ports (this project)
 
 | Service | Port | Default (unused here) |
