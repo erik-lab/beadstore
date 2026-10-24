@@ -136,6 +136,18 @@ Serving responses carry `Cache-Control: private, max-age=31536000, immutable`
 — the bytes at a given image id never change, because an edit uploads a new
 image.
 
+## Checking a deployment's storage
+
+```bash
+cd backend && python -m scripts.check_storage
+```
+
+Prints the resolved configuration (never the secret), then writes, reads,
+stat-checks and deletes a test object. Exits non-zero on failure and names the
+usual causes — missing bucket, wrong endpoint shape, mismatched region,
+revoked key. Deliberately independent of auth, products and the UI, so it
+isolates storage from everything layered on top of it.
+
 ## Not done yet
 
 - **No UI.** Upload from the product page is the next piece.

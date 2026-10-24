@@ -182,6 +182,10 @@ cd backend
 Vendor" record (used when a supplier order's vendor isn't known), one demo vendor, one demo
 location, and one demo product with an inventory unit.
 
+`check_storage.py` (`python -m scripts.check_storage`) is not seed data — it
+round-trips a test file through the configured object storage and reports what
+it resolved, for diagnosing a failing photo upload.
+
 `seed_attribute_picklists.py` seeds ~350 pick-list values (material, color, size, shape, finish,
 manufacturing method, design motif, hole configuration, cut style) and additional
 categories/subtypes, sourced from a taxonomy survey of other bead stores — so pick-list dropdowns

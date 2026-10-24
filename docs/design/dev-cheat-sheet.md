@@ -38,6 +38,18 @@ format (CSV, pasted text, dictation, .docx, PDF, photos) keeps working.
 | Backend (uvicorn) | **8123** | 8000 |
 | Frontend (Vite)   | **5193** | 5173 |
 
+## Check object storage
+
+```bash
+cd backend
+./.venv/bin/python -m scripts.check_storage
+```
+
+Round-trips a test file through whatever `STORAGE_BACKEND` points at and
+cleans up after itself — no auth, no product, no browser. When a photo upload
+fails, run this first: it says whether the problem is the storage config or
+everything else. Works in the Render shell too, as a post-deploy smoke check.
+
 ## Start servers
 
 ```bash
