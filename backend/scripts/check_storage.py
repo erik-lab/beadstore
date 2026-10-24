@@ -32,7 +32,22 @@ TEST_KEY = f"products/storage-check/{uuid.uuid4()}.txt"
 TEST_BODY = b"beadstore storage check"
 
 
+def trust_store_state() -> str:
+    """How TLS is being verified, as a line for the configuration block.
+
+    Shown because the alternative is a single log warning above the output,
+    which is easy to scroll past — and then the TLS advice below reads as if
+    nothing had been configured at all.
+    """
+    if not settings.use_system_trust_store:
+        return "false (using Python's own CA bundle)"
+    if _using_os_trust:
+        return "true (active — verifying against the OS certificate store)"
+    return "true  <-- REQUESTED BUT truststore IS NOT INSTALLED, so it is NOT in effect"
+
+
 def describe_configuration() -> None:
+    print(f"USE_SYSTEM_TRUST_STORE {trust_store_state()}")
     backend = (settings.storage_backend or "local").lower()
     print(f"STORAGE_BACKEND       {backend}")
     if backend == "local":
@@ -62,6 +77,22 @@ MISSING_PACKAGE_ADVICE = """Nothing is wrong with the configuration above — in
 and run this again:
 
   pip install -r requirements.txt"""
+
+TRUSTSTORE_NOT_INSTALLED_ADVICE = """USE_SYSTEM_TRUST_STORE is on, which is the right setting for this machine,
+but the truststore package isn't installed — so it fell back to Python's own
+CA bundle and the certificate check failed exactly as before.
+
+Install it and run this again:
+
+  pip install truststore
+
+On a machine where HTTPS is intercepted, pip needs the same bypass it always
+does here:
+
+  pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org truststore
+
+Nothing else in the configuration above needs changing, and there's no need to
+put the CA bundle settings back."""
 
 TLS_INTERCEPTION_ADVICE = """This is a TLS trust problem on THIS MACHINE, not a problem with the
 configuration above, the bucket, or the credentials. Something local is
@@ -143,6 +174,12 @@ def advice_for(exc: Exception) -> str:
     if "pip install" in message:
         return MISSING_PACKAGE_ADVICE
     if "CERTIFICATE_VERIFY_FAILED" in message or "SSL" in message:
+        # Don't hand over the CA-bundle instructions when the OS trust store
+        # was asked for and simply isn't installed — that reads as "your
+        # configuration is wrong" when the configuration is right and one
+        # package is missing.
+        if settings.use_system_trust_store and not _using_os_trust:
+            return TRUSTSTORE_NOT_INSTALLED_ADVICE
         return TLS_INTERCEPTION_ADVICE
     for status_prefix, advice in STATUS_ADVICE.items():
         if status_prefix in message:
