@@ -12,6 +12,7 @@ from app.models.product import Product
 from app.models.purchase_order import PurchaseOrderLine
 from app.models.receipt import ReceiptLine
 from app.schemas.product import ProductCreate, ProductUpdate
+from app.services import sku_service
 
 # Optional attribute fields eligible for the "hybrid pick list" (type-ahead of
 # previously used values, or type a new one). Whitelisted explicitly rather
@@ -70,7 +71,9 @@ def list_products(
 
 
 def create_product(db: Session, payload: ProductCreate) -> Product:
-    product = Product(**payload.model_dump())
+    # Every product gets the shop's own code at birth, so there's never a
+    # product that can't be labelled, scanned or pushed to Etsy.
+    product = Product(**payload.model_dump(), sku=sku_service.generate_product_sku(db))
     db.add(product)
     db.commit()
     db.refresh(product)

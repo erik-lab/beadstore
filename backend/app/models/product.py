@@ -19,7 +19,14 @@ class Product(UUIDPKMixin, TimestampMixin, AuditMixin, Base):
     # instead of formally adding a one-off row to the shared subtype list.
     custom_subtype: Mapped[str | None] = mapped_column(String(100), nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The shop's own code — generated once at create, never reassigned, and
+    # what goes on bin labels, into barcodes and onto the Etsy listing. See
+    # services/sku_service.py.
     sku: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    # What the supplier calls it. Deliberately not unique: two vendors reuse
+    # each other's codes, and the same item can arrive under different ones.
+    # Populated by the inventory importer from whatever code the source lists.
+    vendor_sku: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     material: Mapped[str | None] = mapped_column(String(100), nullable=True)
     color: Mapped[str | None] = mapped_column(String(100), nullable=True)

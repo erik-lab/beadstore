@@ -202,6 +202,12 @@ def push_listing(db: Session, catalog_listing_id: uuid.UUID, overrides: dict | N
     attach_derived_availability(db, listing)
     quantity = public_available_quantity(listing) or 0
 
+    price = float(listing.price) if listing.price is not None else 0
+    # The shop's own product code, which Etsy carries on the listing's
+    # inventory — it's what makes an incoming Etsy order identifiable as this
+    # product rather than something matched by title.
+    product_sku = listing.product.sku if listing.product else None
+
     try:
         if sync_row.etsy_listing_id is None:
             result = etsy_service.create_draft_listing(
@@ -211,7 +217,7 @@ def push_listing(db: Session, catalog_listing_id: uuid.UUID, overrides: dict | N
                     "quantity": quantity,
                     "title": listing.title,
                     "description": listing.listing_description or listing.short_description or listing.title,
-                    "price": float(listing.price) if listing.price is not None else 0,
+                    "price": price,
                     "who_made": sync_row.who_made,
                     "when_made": sync_row.when_made,
                     "taxonomy_id": sync_row.taxonomy_id,
@@ -221,21 +227,21 @@ def push_listing(db: Session, catalog_listing_id: uuid.UUID, overrides: dict | N
                 },
             )
             sync_row.etsy_listing_id = str(result["listing_id"])
-        else:
-            etsy_service.update_listing_inventory(
-                account.shop_id,
-                sync_row.etsy_listing_id,
-                access_token,
-                {
-                    "products": [
-                        {
-                            "offerings": [
-                                {"price": float(listing.price) if listing.price is not None else 0, "quantity": quantity, "is_enabled": True}
-                            ]
-                        }
-                    ]
-                },
-            )
+
+        # Inventory is updated on every push, including straight after a
+        # create: Etsy keeps the SKU on the inventory rather than the listing,
+        # so a create alone would leave the listing without one until some
+        # later push happened to come along.
+        offering = {"price": price, "quantity": quantity, "is_enabled": True}
+        inventory_product: dict = {"offerings": [offering]}
+        if product_sku:
+            inventory_product["sku"] = product_sku
+        etsy_service.update_listing_inventory(
+            account.shop_id,
+            sync_row.etsy_listing_id,
+            access_token,
+            {"products": [inventory_product]},
+        )
         sync_row.sync_status = EtsySyncStatus.synced
         sync_row.last_synced_at = datetime.now(timezone.utc)
         sync_row.last_error = None

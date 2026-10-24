@@ -366,7 +366,7 @@ export function IntakeRowCard({
           blankLabel: "Not set",
           newLabel: "Add a new location...",
         })}
-        {field("SKU / item code", "sku")}
+        {field("Supplier's item code", "sku")}
       </div>
 
       <div className="maintenance-row">

@@ -773,15 +773,11 @@ def test_long_names_are_trimmed_to_what_each_column_holds(
     assert len(db_session.query(Vendor).one().name) == 255
 
 
-def test_commit_drops_a_sku_already_in_use_rather_than_failing_the_row(
+def test_imported_codes_land_in_vendor_sku_and_the_shop_mints_its_own(
     client, auth_headers, stub_parser, db_session
 ):
-    """SKUs are unique; a collision should cost the code, not the stock."""
-    category = ProductCategory(name="Beads")
-    db_session.add(category)
-    db_session.flush()
-    db_session.add(Product(name="Something else", category_id=category.id, sku="FMG-123"))
-    db_session.commit()
+    """A code on a supplier's spreadsheet is the supplier's, not the shop's."""
+    from app.services import sku_service
 
     stub_parser["result"] = parse_result([parsed_row(sku="FMG-123")])
     batch = post_text(client, auth_headers).json()
@@ -791,8 +787,38 @@ def test_commit_drops_a_sku_already_in_use_rather_than_failing_the_row(
 
     assert result["committed"] == 1
     created = db_session.query(Product).filter_by(name="8mm Round Czech Glass").one()
-    assert created.sku is None
-    assert db_session.query(InventoryUnit).count() == 1
+    assert created.vendor_sku == "FMG-123"
+    assert sku_service.is_valid_sku(created.sku)
+
+
+def test_two_sources_using_the_same_vendor_code_both_commit(
+    client, auth_headers, stub_parser, db_session
+):
+    """This used to cost a row its code: `sku` was unique and took the
+    supplier's value, so the second product to claim it lost it. Vendor codes
+    aren't unique, and the shop's own code is generated, so neither happens.
+    """
+    category = ProductCategory(name="Beads")
+    db_session.add(category)
+    db_session.flush()
+    db_session.add(Product(name="Something else", category_id=category.id, vendor_sku="FMG-123"))
+    db_session.commit()
+
+    stub_parser["result"] = parse_result(
+        [parsed_row(sku="FMG-123"), parsed_row(product_name="6mm Bicone", sku="FMG-123")]
+    )
+    batch = post_text(client, auth_headers).json()
+    result = client.post(
+        f"/api/v1/inventory-intake/batches/{batch['id']}/commit", headers=auth_headers
+    ).json()
+
+    assert result["committed"] == 2
+    assert result["failed"] == 0
+    sharing = db_session.query(Product).filter_by(vendor_sku="FMG-123").all()
+    assert len(sharing) == 3
+    # Every one of them still got its own distinct shop code.
+    assert len({p.sku for p in sharing}) == 3
+    assert db_session.query(InventoryUnit).count() == 2
 
 
 def test_pointing_a_row_at_a_nonexistent_product_is_rejected(client, auth_headers, stub_parser):

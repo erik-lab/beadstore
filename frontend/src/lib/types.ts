@@ -143,7 +143,10 @@ export interface Product {
   subtype_name?: string | null;
   custom_subtype?: string | null;
   description: string | null;
+  /** The shop's own generated code — barcoded, sent to Etsy, never edited. */
   sku: string | null;
+  /** Whatever the supplier calls it. Not unique; vendors reuse codes. */
+  vendor_sku: string | null;
   material: string | null;
   color: string | null;
   size: string | null;

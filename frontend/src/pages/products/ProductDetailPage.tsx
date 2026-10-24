@@ -40,8 +40,14 @@ export function ProductDetailPage() {
       <section className="detail-section">
         <h2>Product Details</h2>
         <dl className="detail-grid">
-          <dt>SKU</dt>
-          <dd>{p.sku ?? "—"}</dd>
+          <dt>Shop code</dt>
+          {/* Assigned once and never changed — it's on the bin label and on
+              Etsy. Monospaced so it can be read off and typed back. */}
+          <dd>
+            <code>{p.sku ?? "—"}</code>
+          </dd>
+          <dt>Supplier's code</dt>
+          <dd>{p.vendor_sku ?? "—"}</dd>
           <dt>Description</dt>
           <dd>{p.description ?? "—"}</dd>
           <dt>Material</dt>

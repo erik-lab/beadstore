@@ -32,7 +32,9 @@ class ProductCreate(ProductAttributes):
     subtype_id: uuid.UUID | None = None
     custom_subtype: str | None = None
     description: str | None = None
-    sku: str | None = None
+    # `sku` is absent on purpose: the shop's own code is generated server-side
+    # and never client-supplied, so it can't be made to collide or drift.
+    vendor_sku: str | None = None
     image_url: str | None = None
     image_status: ImageStatus = ImageStatus.none
     media_notes: str | None = None
@@ -45,7 +47,9 @@ class ProductUpdate(BaseModel):
     subtype_id: uuid.UUID | None = None
     custom_subtype: str | None = None
     description: str | None = None
-    sku: str | None = None
+    # Not `sku`: the shop's own code is immutable once it exists, because it's
+    # already on a printed label and on Etsy by the time anyone would edit it.
+    vendor_sku: str | None = None
     material: str | None = None
     color: str | None = None
     size: str | None = None
@@ -79,6 +83,7 @@ class ProductRead(ORMModel):
     custom_subtype: str | None = None
     description: str | None
     sku: str | None
+    vendor_sku: str | None
     material: str | None
     color: str | None
     size: str | None

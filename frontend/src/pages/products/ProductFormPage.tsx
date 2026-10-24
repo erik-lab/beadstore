@@ -25,7 +25,7 @@ export function ProductFormPage() {
   const [subtypeId, setSubtypeId] = useState("");
   const [customSubtype, setCustomSubtype] = useState("");
   const [description, setDescription] = useState("");
-  const [sku, setSku] = useState("");
+  const [vendorSku, setVendorSku] = useState("");
   const [attributes, setAttributes] = useState<Record<string, string>>({});
   const [attributeOptions, setAttributeOptions] = useState<Record<string, string[]>>({});
   const [subtypes, setSubtypes] = useState<ProductSubtype[]>([]);
@@ -40,7 +40,7 @@ export function ProductFormPage() {
       setSubtypeId(p.subtype_id ?? (p.custom_subtype ? OTHER_VALUE : ""));
       setCustomSubtype(p.custom_subtype ?? "");
       setDescription(p.description ?? "");
-      setSku(p.sku ?? "");
+      setVendorSku(p.vendor_sku ?? "");
       const attrs: Record<string, string> = {};
       for (const field of ATTRIBUTE_FIELDS) {
         const value = p[field.key];
@@ -109,7 +109,7 @@ export function ProductFormPage() {
         subtype_id: subtypeId && subtypeId !== OTHER_VALUE ? subtypeId : null,
         custom_subtype: subtypeId === OTHER_VALUE ? customSubtype.trim() : null,
         description: description || null,
-        sku: sku || null,
+        vendor_sku: vendorSku || null,
         ...Object.fromEntries(ATTRIBUTE_FIELDS.map((f) => [f.key, attributes[f.key] || null])),
       };
       if (isEdit) {
@@ -183,8 +183,12 @@ export function ProductFormPage() {
         </label>
 
         <label>
-          SKU (optional)
-          <input value={sku} onChange={(e) => setSku(e.target.value)} />
+          Supplier's item code (optional)
+          <input value={vendorSku} onChange={(e) => setVendorSku(e.target.value)} />
+          <span className="page-subtitle">
+            Whatever the vendor calls it, for matching their invoices. This shop's own code is
+            assigned automatically and shown on the product page.
+          </span>
         </label>
 
         <fieldset>

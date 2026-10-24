@@ -32,6 +32,7 @@ from app.models.location import Location
 from app.models.product import Product
 from app.models.product_category import ProductCategory, ProductSubtype
 from app.models.vendor import Vendor
+from app.services import sku_service
 from app.services.product_service import ATTRIBUTE_FIELDS
 
 # Product attribute columns are String(100) and the name is String(255).
@@ -503,10 +504,6 @@ def _resolve_subtype(db: Session, category_id: uuid.UUID, name: str | None) -> t
     return None, name[:100]
 
 
-def _sku_available(db: Session, sku: str) -> bool:
-    return db.query(Product.id).filter(Product.sku == sku).first() is None
-
-
 def _build_product(db: Session, row: InventoryIntakeRow) -> Product:
     category = _get_or_create_by_name(db, ProductCategory, row.category_name)
     subtype_id, custom_subtype = _resolve_subtype(db, category.id, row.subtype_name)
@@ -532,10 +529,12 @@ def _build_product(db: Session, row: InventoryIntakeRow) -> Product:
         subtype_id=subtype_id,
         custom_subtype=custom_subtype,
         description=row.description,
-        # A SKU already in use belongs to a different product; taking it would
-        # break the unique constraint, so the row keeps its stock and loses
-        # only the code.
-        sku=row.sku if row.sku and _sku_available(db, row.sku) else None,
+        # The code a source lists is the *supplier's*, which is why it lands
+        # in vendor_sku. The shop's own `sku` is generated here and never
+        # taken from an import — so two vendors using the same code is a
+        # non-event rather than a unique-constraint collision.
+        vendor_sku=row.sku,
+        sku=sku_service.generate_product_sku(db),
         source_type=ProductSourceType.purchased,
         **attributes,
     )

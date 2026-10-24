@@ -63,7 +63,7 @@ def test_inventory_unit_list_resolves_product_name(client, auth_headers):
     category = _create_category(client, auth_headers)
     product = client.post(
         "/api/v1/products",
-        json={"name": "6mm Round Garnet", "category_id": category["id"], "sku": "GAR-6MM"},
+        json={"name": "6mm Round Garnet", "category_id": category["id"], "vendor_sku": "GAR-6MM"},
         headers=auth_headers,
     ).json()
 
@@ -82,7 +82,8 @@ def test_inventory_unit_list_resolves_product_name(client, auth_headers):
     assert resp.status_code == 200
     unit = resp.json()[0]
     assert unit["product_name"] == "6mm Round Garnet"
-    assert unit["product_sku"] == "GAR-6MM"
+    # product_sku surfaces the shop's own generated code, not the supplier's.
+    assert unit["product_sku"] == product["sku"]
 
 
 def test_product_detail_shows_purchase_order_and_receipt_history(client, auth_headers):

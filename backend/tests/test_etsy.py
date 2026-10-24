@@ -385,3 +385,37 @@ def test_option_lookups_need_a_connected_shop(client, auth_headers):
 def test_option_lookups_require_staff_auth(client):
     for path in ("/api/v1/etsy/shipping-profiles", "/api/v1/etsy/return-policies", "/api/v1/etsy/taxonomy"):
         assert client.get(path).status_code == 401
+
+
+def test_push_sends_the_shop_sku_to_etsy_on_the_first_push(client, auth_headers):
+    """Etsy keeps the SKU on a listing's inventory, not on the listing.
+
+    So inventory is updated straight after a create — otherwise the listing
+    would sit there without a SKU until some later push happened along, and
+    an incoming order couldn't be tied back to the product by code.
+    """
+    from app.etsy_simulator.state import store
+    from app.services import sku_service
+
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    resp = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push",
+        json={
+            "taxonomy_id": 100,
+            "shipping_profile_id": 200,
+            "return_policy_id": 300,
+            "who_made": "i_did",
+            "when_made": "made_to_order",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    etsy_listing_id = resp.json()["etsy_listing_id"]
+
+    stored = store.listings[etsy_listing_id]
+    assert stored["products"], "inventory should have been set on the first push"
+    assert stored["products"][0]["sku"] == product["sku"]
+    assert sku_service.is_valid_sku(stored["products"][0]["sku"])
