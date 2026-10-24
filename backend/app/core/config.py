@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     gmail_orders_label: str = "Bead Store Orders"
     outlook_orders_label: str = "Bead Store Orders"
 
+    # Verify TLS against the OS certificate store instead of Python's own
+    # bundle — see app/core/trust.py. Needed only on a machine that
+    # intercepts HTTPS; leave off on a server.
+    use_system_trust_store: bool = False
+
     # Where uploaded product photos live — see app/core/storage.py.
     # "local" writes to storage_local_root, which is right for development and
     # wrong for Render, whose filesystem doesn't survive a deploy. "s3" points

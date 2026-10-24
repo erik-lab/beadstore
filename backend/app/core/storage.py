@@ -120,6 +120,33 @@ class LocalObjectStore(ObjectStore):
             shutil.rmtree(self.root)
 
 
+def describe_s3_error(exc: Exception) -> str:
+    """Pull the HTTP status and error code out of a botocore exception.
+
+    `str()` on a ClientError can read "An error occurred () when calling the
+    PutObject operation:" — empty code, empty message — whenever the service
+    returns an error body botocore can't parse as S3 XML, which Supabase
+    does. The status code is then the only thing that identifies the problem,
+    and it's sitting in the response dict.
+    """
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return str(exc) or exc.__class__.__name__
+
+    error = response.get("Error") or {}
+    metadata = response.get("ResponseMetadata") or {}
+    parts = []
+    if status_code := metadata.get("HTTPStatusCode"):
+        parts.append(f"HTTP {status_code}")
+    if code := error.get("Code"):
+        parts.append(f"code {code}")
+    if message := error.get("Message"):
+        parts.append(message)
+    if not parts:
+        return str(exc) or exc.__class__.__name__
+    return ", ".join(parts)
+
+
 class S3ObjectStore(ObjectStore):
     """S3-compatible object storage — Supabase Storage in this project.
 
@@ -188,20 +215,20 @@ class S3ObjectStore(ObjectStore):
                 Bucket=self.bucket, Key=validate_key(key), Body=data, ContentType=content_type
             )
         except Exception as exc:  # noqa: BLE001 - boto3 raises a wide family
-            raise StorageError(f"Could not upload {key}: {exc}") from exc
+            raise StorageError(f"Could not upload {key}: {describe_s3_error(exc)}") from exc
 
     def get(self, key: str) -> bytes:
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=validate_key(key))
             return response["Body"].read()
         except Exception as exc:  # noqa: BLE001
-            raise StorageError(f"Could not fetch {key}: {exc}") from exc
+            raise StorageError(f"Could not fetch {key}: {describe_s3_error(exc)}") from exc
 
     def delete(self, key: str) -> None:
         try:
             self.client.delete_object(Bucket=self.bucket, Key=validate_key(key))
         except Exception as exc:  # noqa: BLE001
-            raise StorageError(f"Could not delete {key}: {exc}") from exc
+            raise StorageError(f"Could not delete {key}: {describe_s3_error(exc)}") from exc
 
     def exists(self, key: str) -> bool:
         try:

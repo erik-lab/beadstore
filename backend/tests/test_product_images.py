@@ -5,6 +5,7 @@ the real LocalObjectStore rather than a mock — the adapter is the part most
 worth exercising, since the Supabase one can't be reached from here.
 """
 import base64
+import builtins
 import sys
 import io
 import uuid
@@ -594,3 +595,100 @@ def test_the_factory_forwards_the_ca_bundle(monkeypatch):
     store = storage.get_object_store()
     assert store._ca_bundle == "/etc/ssl/custom-roots.pem"
     storage.get_object_store.cache_clear()
+
+
+# --------------------------------------------------------------------------
+# Error reporting
+# --------------------------------------------------------------------------
+
+def test_an_unparseable_s3_error_still_reports_its_http_status():
+    """Supabase returns error bodies botocore can't read as S3 XML.
+
+    str() on the exception is then "An error occurred () when calling the
+    PutObject operation:" — empty code, empty message — and the status is the
+    only thing left that identifies the problem.
+    """
+    from botocore.exceptions import ClientError
+
+    exc = ClientError(
+        {"Error": {"Code": "", "Message": ""}, "ResponseMetadata": {"HTTPStatusCode": 404}},
+        "PutObject",
+    )
+    assert "()" in str(exc), "fixture should reproduce the unhelpful default"
+    assert storage.describe_s3_error(exc) == "HTTP 404"
+
+
+def test_a_normal_s3_error_keeps_its_code_and_message():
+    from botocore.exceptions import ClientError
+
+    exc = ClientError(
+        {
+            "Error": {"Code": "NoSuchBucket", "Message": "The specified bucket does not exist"},
+            "ResponseMetadata": {"HTTPStatusCode": 404},
+        },
+        "PutObject",
+    )
+    described = storage.describe_s3_error(exc)
+    assert "HTTP 404" in described
+    assert "NoSuchBucket" in described
+    assert "does not exist" in described
+
+
+def test_a_non_botocore_exception_falls_back_to_its_text():
+    assert storage.describe_s3_error(RuntimeError("socket closed")) == "socket closed"
+    # Something with no message at all still names itself rather than going blank.
+    assert storage.describe_s3_error(RuntimeError()) == "RuntimeError"
+
+
+# --------------------------------------------------------------------------
+# OS trust store
+# --------------------------------------------------------------------------
+
+def test_trust_store_is_off_unless_asked_for(monkeypatch):
+    """A server has no HTTPS interception to work around."""
+    from app.core import trust
+
+    monkeypatch.setattr(trust.settings, "use_system_trust_store", False)
+    monkeypatch.setattr(trust, "_applied", False)
+    injected = []
+    monkeypatch.setitem(
+        sys.modules, "truststore", type("truststore", (), {"inject_into_ssl": lambda: injected.append(True)})
+    )
+
+    assert trust.apply_system_trust_store() is False
+    assert injected == []
+
+
+def test_trust_store_is_applied_once_when_enabled(monkeypatch):
+    from app.core import trust
+
+    monkeypatch.setattr(trust.settings, "use_system_trust_store", True)
+    monkeypatch.setattr(trust, "_applied", False)
+    injected = []
+    monkeypatch.setitem(
+        sys.modules, "truststore", type("truststore", (), {"inject_into_ssl": lambda: injected.append(True)})
+    )
+
+    assert trust.apply_system_trust_store() is True
+    # Called again by another entry point — the app and the scripts both do.
+    assert trust.apply_system_trust_store() is True
+    assert len(injected) == 1
+    monkeypatch.setattr(trust, "_applied", False)
+
+
+def test_a_missing_truststore_package_warns_and_carries_on(monkeypatch):
+    """Turning the flag on without the package shouldn't break start-up."""
+    from app.core import trust
+
+    monkeypatch.setattr(trust.settings, "use_system_trust_store", True)
+    monkeypatch.setattr(trust, "_applied", False)
+
+    real_import = builtins.__import__
+
+    def without_truststore(name, *args, **kwargs):
+        if name == "truststore":
+            raise ImportError("not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_truststore)
+    assert trust.apply_system_trust_store() is False

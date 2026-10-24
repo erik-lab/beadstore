@@ -17,7 +17,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import get_settings
-from app.core.storage import StorageError, get_object_store
+from app.core.trust import apply_system_trust_store
+
+# Before storage imports boto3 and builds an SSL context.
+_using_os_trust = apply_system_trust_store()
+
+from app.core.storage import StorageError, get_object_store  # noqa: E402
 
 settings = get_settings()
 
@@ -108,6 +113,24 @@ CONFIGURATION_ADVICE = """Common causes:
   - the region doesn't match the one shown on the S3 Configuration page
   - the access key was revoked, or the secret was mistyped"""
 
+# TLS is clearly working by the time these come back — the request reached
+# Supabase and it answered. Keyed on status because Supabase returns error
+# bodies botocore can't parse as S3 XML, leaving the code and message empty.
+STATUS_ADVICE = {
+    "HTTP 400": """Supabase rejected the request itself. Most often the region: it has to
+match the one printed beside the endpoint on the S3 Configuration page, and
+STORAGE_S3_REGION above is whatever you set (us-east-1 is only this app's
+default, not necessarily yours). Worth checking the bucket name for stray
+spaces or capitals too.""",
+    "HTTP 403": """Supabase understood the request and refused it — so the endpoint and
+bucket are reachable, and this is about the credentials. Either the access key
+was revoked, the secret is mistyped or truncated, or the key belongs to a
+different project than the endpoint.""",
+    "HTTP 404": """The endpoint resolved but the bucket isn't there. Create a bucket in
+Supabase Storage named exactly what STORAGE_S3_BUCKET says above — nothing in
+this app creates it for you.""",
+}
+
 
 def advice_for(exc: Exception) -> str:
     """Advice matched to the failure, not a list of everything it could be.
@@ -121,6 +144,9 @@ def advice_for(exc: Exception) -> str:
         return MISSING_PACKAGE_ADVICE
     if "CERTIFICATE_VERIFY_FAILED" in message or "SSL" in message:
         return TLS_INTERCEPTION_ADVICE
+    for status_prefix, advice in STATUS_ADVICE.items():
+        if status_prefix in message:
+            return advice
     return CONFIGURATION_ADVICE
 
 

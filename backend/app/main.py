@@ -6,7 +6,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
-from app.etsy_simulator.router import router as etsy_simulator_router
+from app.core.trust import apply_system_trust_store
+
+# Before anything can create an SSL context. No-op unless
+# USE_SYSTEM_TRUST_STORE is on.
+apply_system_trust_store()
+
+from app.etsy_simulator.router import router as etsy_simulator_router  # noqa: E402
 from app.routers import (
     api_access,
     api_clients,

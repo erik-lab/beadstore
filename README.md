@@ -111,13 +111,16 @@ certificate store instead of its own bundled one).
 **`CERTIFICATE_VERIFY_FAILED` from the app, not just pip** — something local is
 intercepting HTTPS (corporate proxy, VPN, or antivirus HTTPS scanning) and presenting its own
 certificate. It affects outbound calls to Supabase Storage, Anthropic and Etsy, not only `pip`.
-`python -m scripts.check_storage` prints the full fix when it hits this. The short version: export
-the roots your machine already trusts to a PEM, then set `STORAGE_S3_CA_BUNDLE` in `backend/.env`
-for object storage and the real environment variable `SSL_CERT_FILE` for the httpx-based callers
-(Anthropic, Etsy) — or `pip install truststore` to have Python use the OS trust store for every
-library at once. Note that `.env` is read by pydantic-settings into its own object and never
-exported to `os.environ`, so library-standard names like `AWS_CA_BUNDLE` placed there are silently
-ignored; that is why storage takes an explicit setting. Never
+`python -m scripts.check_storage` prints the full fix when it hits this. The simplest fix is
+`USE_SYSTEM_TRUST_STORE=true` in `backend/.env`, which makes Python verify against the OS
+certificate store — the same one the browser trusts — for every library at once. Certificates are
+still verified; only the trust source changes. Leave it off on a server.
+
+The narrower alternative is `STORAGE_S3_CA_BUNDLE` pointing at a PEM of your machine's roots,
+which covers object storage only. Note that `.env` is read by pydantic-settings into its own
+object and never exported to `os.environ`, so library-standard names like `AWS_CA_BUNDLE` or
+`SSL_CERT_FILE` placed there are silently ignored — they would have to be real machine environment
+variables. That is why both of these are explicit app settings instead. Never
 disable certificate verification — that setting would follow the code into production, where the
 interception doesn't exist and the risk is real. A deployed server normally doesn't see this at
 all, so it blocks local testing rather than deploying.
