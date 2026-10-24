@@ -3,6 +3,23 @@
 Quick reference for this project specifically — ports are set non-default here to avoid
 collisions with your other projects running at the same time.
 
+> **On Windows, swap `bin` for `Scripts`** in every `./.venv/bin/...` below — the venv layout is
+> `.venv/Scripts/` there, not `.venv/bin/`. So `./.venv/Scripts/uvicorn`,
+> `./.venv/Scripts/pip`, `./.venv/Scripts/python`. A path with `bin` fails with
+> "is not recognized as the name of a cmdlet" in PowerShell, or "No such file or directory" in
+> Git Bash.
+
+## After pulling new commits
+
+```bash
+cd backend
+./.venv/bin/pip install -r requirements.txt   # only if requirements.txt changed
+./.venv/bin/alembic upgrade head              # only if a new migration landed
+```
+
+Skipping these is the usual cause of an import error or a "relation does not exist" right after
+a pull.
+
 ## Ports (this project)
 
 | Service | Port | Default (unused here) |

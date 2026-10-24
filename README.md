@@ -62,10 +62,17 @@ Frontend runs at `http://localhost:5193` and expects the backend at `VITE_API_BA
 Nothing here needs redoing from scratch after a restart — the venv, `node_modules`, `.env` files,
 and local SQLite DB all persist on disk. Just:
 
-> **After pulling new commits**, run `./.venv/bin/pip install -r requirements.txt` and
-> `./.venv/bin/alembic upgrade head` first if either has changed. Import Inventory, for instance,
-> added both a dependency (`openpyxl`) and a migration — without the former, `.xlsx` uploads return
-> a 503 explaining it while every other format keeps working.
+> **After pulling new commits**, install dependencies and run migrations first if either has
+> changed. On Windows (PowerShell) the venv puts these in `Scripts/`, not `bin/`:
+>
+> ```powershell
+> ./.venv/Scripts/pip install -r requirements.txt
+> ./.venv/Scripts/alembic upgrade head
+> ```
+>
+> On macOS/Linux use `./.venv/bin/` instead. Import Inventory, for instance, added both a
+> dependency (`openpyxl`) and a migration — without the former, `.xlsx` uploads return a 503
+> explaining it while every other format keeps working.
 
 ```bash
 # backend
