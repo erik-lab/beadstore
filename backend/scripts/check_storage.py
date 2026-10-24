@@ -91,13 +91,20 @@ def main() -> int:
     except StorageError as exc:
         print("FAILED")
         print(f"\n{exc}\n")
-        print("Common causes:")
-        print("  - the bucket doesn't exist yet (create it in Supabase first)")
-        print("  - STORAGE_S3_BUCKET doesn't match the bucket's name")
-        print("  - the endpoint is wrong; it should look like")
-        print("    https://<project-ref>.supabase.co/storage/v1/s3")
-        print("  - the region doesn't match the one shown on the S3 Configuration page")
-        print("  - the access key was revoked, or the secret was mistyped")
+        # A missing package is nothing to do with buckets or credentials, and
+        # printing those causes underneath it sends you looking in the wrong
+        # place — which is exactly what this did the first time it fired.
+        if "pip install" in str(exc):
+            print("Nothing is wrong with the configuration above — install the")
+            print("dependencies and run this again.")
+        else:
+            print("Common causes:")
+            print("  - the bucket doesn't exist yet (create it in Supabase first)")
+            print("  - STORAGE_S3_BUCKET doesn't match the bucket's name")
+            print("  - the endpoint is wrong; it should look like")
+            print("    https://<project-ref>.supabase.co/storage/v1/s3")
+            print("  - the region doesn't match the one shown on the S3 Configuration page")
+            print("  - the access key was revoked, or the secret was mistyped")
         # Best-effort tidy-up, in case the write succeeded and a later step failed.
         try:
             store.delete(TEST_KEY)
