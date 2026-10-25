@@ -544,6 +544,11 @@ def test_ca_bundle_setting_is_passed_to_the_s3_client(monkeypatch):
     class FakeClient:
         def __init__(self, *args, **kwargs):
             captured.update(kwargs)
+            # The real client carries an event registry; the store hooks
+            # before-parse onto it to capture error bodies.
+            self.meta = type(
+                "meta", (), {"events": type("events", (), {"register": staticmethod(lambda *a, **k: None)})()}
+            )()
 
     fake_boto3 = type("boto3", (), {"client": staticmethod(lambda *a, **k: FakeClient(*a, **k))})
     monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
@@ -569,6 +574,11 @@ def test_without_a_ca_bundle_the_default_trust_store_is_used(monkeypatch):
     class FakeClient:
         def __init__(self, *args, **kwargs):
             captured.update(kwargs)
+            # The real client carries an event registry; the store hooks
+            # before-parse onto it to capture error bodies.
+            self.meta = type(
+                "meta", (), {"events": type("events", (), {"register": staticmethod(lambda *a, **k: None)})()}
+            )()
 
     fake_boto3 = type("boto3", (), {"client": staticmethod(lambda *a, **k: FakeClient(*a, **k))})
     monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
@@ -763,3 +773,81 @@ def test_no_region_default_is_shipped():
     from app.core.config import Settings
 
     assert Settings().storage_s3_region == ""
+
+
+def test_the_service_error_body_reaches_the_message(monkeypatch):
+    """Reproduces the Supabase 403 that needed wire logging to diagnose.
+
+    The response carried "<Code>InvalidAccessKeyId</Code>" while the parsed
+    exception had an empty code, so the error read as a bare "HTTP 403" and
+    the one useful fact was invisible without --debug.
+    """
+    from botocore.exceptions import ClientError
+
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+
+    body = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<Error><Resource>product-images/x.txt</Resource>'
+        b"<Code>InvalidAccessKeyId</Code>"
+        b"<Message>The Access Key Id you provided does not exist in our records.</Message></Error>"
+    )
+    store._note_error_body(response_dict={"status_code": 403, "body": body})
+
+    # Exactly what botocore handed over: a status, and nothing else.
+    exc = ClientError(
+        {"Error": {"Code": "", "Message": ""}, "ResponseMetadata": {"HTTPStatusCode": 403}},
+        "PutObject",
+    )
+    message = str(store._storage_error("upload", "products/x/y.jpg", exc))
+
+    assert "HTTP 403" in message
+    assert "InvalidAccessKeyId" in message
+    assert "does not exist in our records" in message
+
+
+def test_a_parsed_error_is_not_repeated_from_the_body(monkeypatch):
+    """When botocore did classify the error, don't say it twice."""
+    from botocore.exceptions import ClientError
+
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+    store._note_error_body(response_dict={"status_code": 404, "body": b"<Error><Code>NoSuchBucket</Code></Error>"})
+
+    exc = ClientError(
+        {
+            "Error": {"Code": "NoSuchBucket", "Message": "The specified bucket does not exist"},
+            "ResponseMetadata": {"HTTPStatusCode": 404},
+        },
+        "PutObject",
+    )
+    message = str(store._storage_error("upload", "products/x/y.jpg", exc))
+    assert message.count("NoSuchBucket") == 1
+    assert "the service said" not in message
+
+
+def test_a_successful_response_leaves_no_stale_error_body():
+    """Or the next failure would quote the previous one's body."""
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+    store._note_error_body(response_dict={"status_code": 403, "body": b"<Error><Code>Boom</Code></Error>"})
+    assert store._last_error_body is not None
+
+    store._note_error_body(response_dict={"status_code": 200, "body": b""})
+    assert store._last_error_body is None

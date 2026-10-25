@@ -179,6 +179,9 @@ class S3ObjectStore(ObjectStore):
         self._secret_access_key = secret_access_key
         self._ca_bundle = ca_bundle
         self._client = None
+        # The last error body the service sent, captured off the wire. See
+        # _note_error_body.
+        self._last_error_body: str | None = None
 
     @property
     def client(self):
@@ -207,7 +210,33 @@ class S3ObjectStore(ObjectStore):
                 # this works around doesn't exist and the risk is real.
                 verify=self._ca_bundle or None,
             )
+            # Keep the raw error body, because botocore doesn't always turn it
+            # into a code: a Supabase 403 arrived carrying
+            # "<Code>InvalidAccessKeyId</Code>" while the parsed exception had
+            # an empty code, so the one useful fact was only visible with wire
+            # logging switched on. Reading it here means it reaches the error
+            # message every time.
+            self._client.meta.events.register("before-parse", self._note_error_body)
         return self._client
+
+    def _note_error_body(self, response_dict=None, **kwargs) -> None:
+        self._last_error_body = None
+        if not isinstance(response_dict, dict):
+            return
+        if (response_dict.get("status_code") or 0) < 400:
+            return
+        body = response_dict.get("body")
+        if isinstance(body, bytes):
+            # Trimmed: enough for a code and message, not a whole HTML page.
+            self._last_error_body = body[:600].decode("utf-8", errors="replace").strip()
+
+    def _storage_error(self, action: str, key: str, exc: Exception) -> StorageError:
+        described = describe_s3_error(exc)
+        # Only when the parsed exception didn't already explain itself, so a
+        # normal error doesn't get the same text twice.
+        if self._last_error_body and "code " not in described:
+            described = f"{described} — the service said: {self._last_error_body}"
+        return StorageError(f"Could not {action} {key}: {described}")
 
     def put(self, key: str, data: bytes, content_type: str) -> None:
         try:
@@ -215,20 +244,20 @@ class S3ObjectStore(ObjectStore):
                 Bucket=self.bucket, Key=validate_key(key), Body=data, ContentType=content_type
             )
         except Exception as exc:  # noqa: BLE001 - boto3 raises a wide family
-            raise StorageError(f"Could not upload {key}: {describe_s3_error(exc)}") from exc
+            raise self._storage_error("upload", key, exc) from exc
 
     def get(self, key: str) -> bytes:
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=validate_key(key))
             return response["Body"].read()
         except Exception as exc:  # noqa: BLE001
-            raise StorageError(f"Could not fetch {key}: {describe_s3_error(exc)}") from exc
+            raise self._storage_error("fetch", key, exc) from exc
 
     def delete(self, key: str) -> None:
         try:
             self.client.delete_object(Bucket=self.bucket, Key=validate_key(key))
         except Exception as exc:  # noqa: BLE001
-            raise StorageError(f"Could not delete {key}: {describe_s3_error(exc)}") from exc
+            raise self._storage_error("delete", key, exc) from exc
 
     def exists(self, key: str) -> bool:
         try:

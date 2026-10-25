@@ -172,13 +172,26 @@ If the region is already right, then it is the credentials:
   - the access key revoked
   - the key belonging to a different project than the endpoint
 
-Run again with --debug to see Supabase's own response, which usually says
-which: SignatureDoesNotMatch points at the region or the secret,
-InvalidAccessKeyId at the key itself.""",
+The service's own error code is quoted in the failure line above when it
+sends one. --debug shows the whole exchange if it doesn't.""",
     "HTTP 404": """The endpoint resolved but the bucket isn't there. Create a bucket in
 Supabase Storage named exactly what STORAGE_S3_BUCKET says above — nothing in
 this app creates it for you.""",
 }
+
+
+INVALID_ACCESS_KEY_ADVICE = """Supabase does not recognise the access key id at all — so this is not the
+region, the secret, or the bucket. That key does not exist in the project the
+endpoint points at.
+
+The endpoint above names the project (the <project-ref> in its hostname). Open
+that project in Supabase, go to Storage -> S3 Configuration -> Access keys,
+and check the key id listed there matches STORAGE_S3_ACCESS_KEY above.
+
+The usual cause is a key created in a DIFFERENT Supabase project than the one
+the endpoint and database belong to — easy to do with more than one project
+open. The other is a key since revoked. Either way, generate a key in this
+project and copy both halves; the secret is only shown once."""
 
 
 def advice_for(exc: Exception) -> str:
@@ -201,6 +214,9 @@ def advice_for(exc: Exception) -> str:
                 detail=_trust.detail, python=sys.executable
             )
         return TLS_INTERCEPTION_ADVICE
+    # The service's own code, when it reached us, beats guessing from status.
+    if "InvalidAccessKeyId" in message:
+        return INVALID_ACCESS_KEY_ADVICE
     for status_prefix, advice in STATUS_ADVICE.items():
         if status_prefix in message:
             return advice
