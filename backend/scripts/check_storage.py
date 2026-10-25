@@ -43,26 +43,33 @@ def describe_secret(secret: str) -> str:
     and a signature rejection says nothing about which character is wrong.
     Its shape is checkable though, and that catches what actually goes wrong
     when copying one: surrounding quotes, a stray character, a truncated
-    paste. Supabase S3 secrets are 64 hexadecimal characters.
+    paste.
+
+    Reports the length rather than asserting a required one. Supabase's S3
+    secrets have been 64 hexadecimal characters, but that isn't something this
+    can verify, and insisting on it would be worse than useless if they ever
+    differ — it would send someone fixing a secret that was already right.
     """
     if not secret:
         return "NOT SET"
 
     notes = []
-    if secret != secret.strip():
-        notes.append("has leading/trailing whitespace")
     stripped = secret.strip()
+    if secret != stripped:
+        notes.append("it has leading/trailing whitespace — remove that")
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in "\"'":
-        notes.append("looks wrapped in quotes — .env values don't need them")
-    if len(stripped) != 64:
-        notes.append(f"is {len(stripped)} characters, where Supabase's are 64")
-    elif any(char not in "0123456789abcdefABCDEF" for char in stripped):
-        offenders = sorted({char for char in stripped if char not in "0123456789abcdefABCDEF"})
-        notes.append(f"is 64 characters but not all hexadecimal (contains {offenders})")
+        notes.append("it looks wrapped in quotes — .env values don't need them")
 
-    if notes:
-        return "set, but it " + "; it ".join(notes)
-    return "set (64 hex characters, the expected shape)"
+    non_hex = sorted({char for char in stripped if char not in "0123456789abcdefABCDEF"})
+    shape = f"{len(stripped)} characters"
+    if non_hex:
+        shape += f", not all hexadecimal (contains {non_hex})"
+    else:
+        shape += ", all hexadecimal"
+    if len(stripped) != 64 or non_hex:
+        shape += " — Supabase's have been 64 hex characters, so this is worth a second look"
+
+    return "set: " + shape + ("; " + "; ".join(notes) if notes else "")
 
 
 def describe_configuration() -> None:

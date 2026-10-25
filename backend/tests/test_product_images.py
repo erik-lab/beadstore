@@ -860,7 +860,7 @@ def test_a_successful_response_leaves_no_stale_error_body():
 @pytest.mark.parametrize(
     "secret,expected",
     [
-        ("a" * 64, "expected shape"),
+        ("a" * 64, "64 characters, all hexadecimal"),
         ("", "NOT SET"),
         ("a" * 65, "65 characters"),
         ("a" * 60, "60 characters"),
@@ -877,6 +877,9 @@ def test_the_secret_shape_is_described_without_revealing_it(secret, expected):
 
     described = describe_secret(secret)
     assert expected in described
+    # A correct-looking secret isn't told it's wrong.
+    if secret == "a" * 64:
+        assert "second look" not in described
     # Nothing of the secret itself, beyond complaint about stray characters.
     assert "a" * 20 not in described
 
