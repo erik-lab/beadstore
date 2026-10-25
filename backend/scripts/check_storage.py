@@ -7,9 +7,13 @@ everything else.
 
 Run with: python -m scripts.check_storage
 
+Add --debug to print the raw HTTP exchange, which is the only way to see the
+error the service actually sent when botocore can't parse it into a code.
+
 Exits non-zero on failure, so it also works as a smoke check after a deploy
 (the Render shell is a fine place to run it).
 """
+import logging
 import sys
 import uuid
 from pathlib import Path
@@ -155,10 +159,22 @@ match the one printed beside the endpoint on the S3 Configuration page, and
 STORAGE_S3_REGION above is whatever you set (us-east-1 is only this app's
 default, not necessarily yours). Worth checking the bucket name for stray
 spaces or capitals too.""",
-    "HTTP 403": """Supabase understood the request and refused it — so the endpoint and
-bucket are reachable, and this is about the credentials. Either the access key
-was revoked, the secret is mistyped or truncated, or the key belongs to a
-different project than the endpoint.""",
+    "HTTP 403": """Supabase understood the request and refused it, so the endpoint is
+reachable and TLS is fine — what it rejected was the signature.
+
+Check the REGION first, not the credentials. An AWS SigV4 request signs the
+region into it, so a wrong region produces exactly this 403 and looks nothing
+like a region problem. STORAGE_S3_REGION is printed above; it has to match the
+value shown beside the endpoint on Supabase's S3 Configuration page.
+
+If the region is already right, then it is the credentials:
+  - the secret mistyped or truncated when copied (it's only shown once)
+  - the access key revoked
+  - the key belonging to a different project than the endpoint
+
+Run again with --debug to see Supabase's own response, which usually says
+which: SignatureDoesNotMatch points at the region or the secret,
+InvalidAccessKeyId at the key itself.""",
     "HTTP 404": """The endpoint resolved but the bucket isn't there. Create a bucket in
 Supabase Storage named exactly what STORAGE_S3_BUCKET says above — nothing in
 this app creates it for you.""",
@@ -191,7 +207,27 @@ def advice_for(exc: Exception) -> str:
     return CONFIGURATION_ADVICE
 
 
+def enable_wire_logging() -> None:
+    """Dump the raw HTTP exchange botocore is having.
+
+    Needed because Supabase returns error bodies botocore can't parse as S3
+    XML, so the code and message come back empty and the real reason —
+    SignatureDoesNotMatch, InvalidAccessKeyId — is only in the response body.
+
+    This prints request headers, which include the access key id and the
+    request signature. It does NOT print the secret, and a signature is
+    single-use, but redact before pasting it anywhere public.
+    """
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    for name in ("botocore", "urllib3"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
+    print("--debug: raw HTTP exchange follows. Request headers include the access")
+    print("key id and the request signature (not the secret) — redact before sharing.\n")
+
+
 def main() -> int:
+    if "--debug" in sys.argv:
+        enable_wire_logging()
     describe_configuration()
 
     try:

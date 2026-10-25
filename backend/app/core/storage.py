@@ -254,6 +254,10 @@ def get_object_store() -> ObjectStore:
             name
             for name, value in (
                 ("STORAGE_S3_ENDPOINT_URL", settings.storage_s3_endpoint_url),
+                # Required rather than defaulted: it's signed into the
+                # request, so a wrong one is a 403 that looks like a
+                # credential problem.
+                ("STORAGE_S3_REGION", settings.storage_s3_region),
                 ("STORAGE_S3_BUCKET", settings.storage_s3_bucket),
                 ("STORAGE_S3_ACCESS_KEY_ID", settings.storage_s3_access_key_id),
                 ("STORAGE_S3_SECRET_ACCESS_KEY", settings.storage_s3_secret_access_key),

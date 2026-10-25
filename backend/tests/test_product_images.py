@@ -168,6 +168,7 @@ def test_factory_honours_the_configured_backend(monkeypatch):
     monkeypatch.setattr(settings, "storage_s3_bucket", "product-images")
     monkeypatch.setattr(settings, "storage_s3_access_key_id", "key")
     monkeypatch.setattr(settings, "storage_s3_secret_access_key", "secret")
+    monkeypatch.setattr(settings, "storage_s3_region", "us-east-2")
     storage.get_object_store.cache_clear()
     store = storage.get_object_store()
     assert isinstance(store, storage.S3ObjectStore)
@@ -589,6 +590,7 @@ def test_the_factory_forwards_the_ca_bundle(monkeypatch):
     monkeypatch.setattr(settings, "storage_s3_bucket", "product-images")
     monkeypatch.setattr(settings, "storage_s3_access_key_id", "key")
     monkeypatch.setattr(settings, "storage_s3_secret_access_key", "secret")
+    monkeypatch.setattr(settings, "storage_s3_region", "us-east-2")
     monkeypatch.setattr(settings, "storage_s3_ca_bundle", "/etc/ssl/custom-roots.pem")
     storage.get_object_store.cache_clear()
 
@@ -733,3 +735,31 @@ def test_a_truststore_that_fails_to_install_itself_is_reported(monkeypatch):
 
     assert (status.requested, status.active) == (True, False)
     assert "unsupported platform" in status.detail
+
+
+def test_the_region_is_required_rather_than_defaulted(monkeypatch):
+    """A wrong region fails as HTTP 403, indistinguishable from a bad secret.
+
+    So there's no default to be silently wrong: it has to be supplied, and
+    the failure names it.
+    """
+    monkeypatch.setattr(settings, "storage_backend", "s3")
+    monkeypatch.setattr(settings, "storage_s3_endpoint_url", "https://example.supabase.co/storage/v1/s3")
+    monkeypatch.setattr(settings, "storage_s3_bucket", "product-images")
+    monkeypatch.setattr(settings, "storage_s3_access_key_id", "key")
+    monkeypatch.setattr(settings, "storage_s3_secret_access_key", "secret")
+    monkeypatch.setattr(settings, "storage_s3_region", "")
+    storage.get_object_store.cache_clear()
+
+    with pytest.raises(Exception) as exc:
+        storage.get_object_store()
+    assert exc.value.status_code == 503
+    assert "STORAGE_S3_REGION" in exc.value.detail
+    storage.get_object_store.cache_clear()
+
+
+def test_no_region_default_is_shipped():
+    """The default that caused this was 'us-east-1' — plausible and wrong."""
+    from app.core.config import Settings
+
+    assert Settings().storage_s3_region == ""

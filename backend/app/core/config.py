@@ -48,7 +48,12 @@ class Settings(BaseSettings):
     storage_backend: str = "local"
     storage_local_root: str = "./var/uploads"
     storage_s3_endpoint_url: str = ""
-    storage_s3_region: str = "us-east-1"
+    # No default on purpose. The region is part of what an AWS SigV4 request
+    # signs, so a plausible-looking wrong value doesn't fail as a region
+    # error — it fails as HTTP 403, indistinguishable from a bad secret. A
+    # default of "us-east-1" cost an afternoon exactly that way. Copy it from
+    # the S3 Configuration page beside the endpoint.
+    storage_s3_region: str = ""
     storage_s3_bucket: str = ""
     storage_s3_access_key_id: str = ""
     storage_s3_secret_access_key: str = ""
