@@ -194,16 +194,38 @@ class S3ObjectStore(ObjectStore):
                     "Object storage needs the boto3 package on the server "
                     "(pip install -r requirements.txt)."
                 )
+            config_options = {
+                # Supabase's S3 endpoint expects path-style addressing; the
+                # virtual-host style boto3 prefers would resolve the bucket
+                # as a subdomain and fail.
+                "s3": {"addressing_style": "path"},
+                "retries": {"max_attempts": 3},
+                # botocore 1.36 began attaching a CRC32 checksum to every
+                # upload as an aws-chunked trailer, which not all
+                # S3-compatible services accept. "when_required" keeps the
+                # request to plain payload signing — the shape third-party
+                # endpoints are built against, and simpler to reason about
+                # when a signature is rejected.
+                "request_checksum_calculation": "when_required",
+                "response_checksum_validation": "when_required",
+            }
+            try:
+                config = Config(**config_options)
+            except TypeError:
+                # Older botocore, before those two options existed. The
+                # chunked-trailer behaviour they disable also postdates it,
+                # so dropping them is correct rather than merely tolerable.
+                for option in ("request_checksum_calculation", "response_checksum_validation"):
+                    config_options.pop(option)
+                config = Config(**config_options)
+
             self._client = boto3.client(
                 "s3",
                 endpoint_url=self._endpoint_url,
                 region_name=self._region,
                 aws_access_key_id=self._access_key_id,
                 aws_secret_access_key=self._secret_access_key,
-                # Supabase's S3 endpoint expects path-style addressing; the
-                # virtual-host style boto3 prefers would resolve the bucket
-                # as a subdomain and fail.
-                config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 3}),
+                config=config,
                 # A CA bundle when one is configured, otherwise botocore's
                 # default trust store. Never False: disabling verification
                 # would travel to production, where the local interception

@@ -36,6 +36,35 @@ TEST_KEY = f"products/storage-check/{uuid.uuid4()}.txt"
 TEST_BODY = b"beadstore storage check"
 
 
+def describe_secret(secret: str) -> str:
+    """Describe the secret's shape without printing any of it.
+
+    The secret is the one input this check can't verify against the service,
+    and a signature rejection says nothing about which character is wrong.
+    Its shape is checkable though, and that catches what actually goes wrong
+    when copying one: surrounding quotes, a stray character, a truncated
+    paste. Supabase S3 secrets are 64 hexadecimal characters.
+    """
+    if not secret:
+        return "NOT SET"
+
+    notes = []
+    if secret != secret.strip():
+        notes.append("has leading/trailing whitespace")
+    stripped = secret.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in "\"'":
+        notes.append("looks wrapped in quotes — .env values don't need them")
+    if len(stripped) != 64:
+        notes.append(f"is {len(stripped)} characters, where Supabase's are 64")
+    elif any(char not in "0123456789abcdefABCDEF" for char in stripped):
+        offenders = sorted({char for char in stripped if char not in "0123456789abcdefABCDEF"})
+        notes.append(f"is 64 characters but not all hexadecimal (contains {offenders})")
+
+    if notes:
+        return "set, but it " + "; it ".join(notes)
+    return "set (64 hex characters, the expected shape)"
+
+
 def describe_configuration() -> None:
     # The interpreter, because "installed but not importable" almost always
     # means installed under a different Python than the one running this.
@@ -61,7 +90,7 @@ def describe_configuration() -> None:
         # Never print the secret; show just enough of the id to tell two apart.
         key_id = settings.storage_s3_access_key_id
         print(f"STORAGE_S3_ACCESS_KEY {key_id[:4] + '...' if key_id else '(not set)'}")
-        print(f"                      secret {'set' if settings.storage_s3_secret_access_key else 'NOT SET'}")
+        print(f"                      secret {describe_secret(settings.storage_s3_secret_access_key)}")
         print(f"STORAGE_PUBLIC_BASE   {settings.storage_public_base_url or '(not set — bytes served by the API)'}")
         bundle = settings.storage_s3_ca_bundle
         if bundle:
@@ -194,6 +223,23 @@ open. The other is a key since revoked. Either way, generate a key in this
 project and copy both halves; the secret is only shown once."""
 
 
+SIGNATURE_MISMATCH_ADVICE = """Supabase recognised the access key id — so the key exists and the project is
+right — but the signature computed from the SECRET didn't match. In order of
+likelihood:
+
+1. The secret is wrong. Most often a stray character picked up when copying,
+   or a truncated paste. It's only displayed once, so if there's any doubt,
+   generate a new key pair and copy both halves again. A Supabase S3 secret
+   is 64 hexadecimal characters with nothing else in it — worth checking
+   the length and that it has no quotes, spaces or line breaks around it in
+   .env.
+2. The region doesn't match the project's. It's signed into the request, so a
+   wrong one fails here too, identically.
+
+Note the secret is the only input not echoed in the configuration above —
+deliberately — so it's also the one thing this check can't verify for you."""
+
+
 def advice_for(exc: Exception) -> str:
     """Advice matched to the failure, not a list of everything it could be.
 
@@ -217,6 +263,8 @@ def advice_for(exc: Exception) -> str:
     # The service's own code, when it reached us, beats guessing from status.
     if "InvalidAccessKeyId" in message:
         return INVALID_ACCESS_KEY_ADVICE
+    if "SignatureDoesNotMatch" in message:
+        return SIGNATURE_MISMATCH_ADVICE
     for status_prefix, advice in STATUS_ADVICE.items():
         if status_prefix in message:
             return advice

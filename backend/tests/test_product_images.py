@@ -851,3 +851,81 @@ def test_a_successful_response_leaves_no_stale_error_body():
 
     store._note_error_body(response_dict={"status_code": 200, "body": b""})
     assert store._last_error_body is None
+
+
+# --------------------------------------------------------------------------
+# Secret shape
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "secret,expected",
+    [
+        ("a" * 64, "expected shape"),
+        ("", "NOT SET"),
+        ("a" * 65, "65 characters"),
+        ("a" * 60, "60 characters"),
+        ('"' + "a" * 64 + '"', "wrapped in quotes"),
+        ("a" * 64 + " ", "whitespace"),
+        ("a" * 60 + "wxyz", "not all hexadecimal"),
+    ],
+)
+def test_the_secret_shape_is_described_without_revealing_it(secret, expected):
+    """The secret is the one input the live check can't verify, and a
+    signature rejection doesn't say which character is wrong — but the
+    mistakes that actually happen when copying one are all shape mistakes."""
+    from scripts.check_storage import describe_secret
+
+    described = describe_secret(secret)
+    assert expected in described
+    # Nothing of the secret itself, beyond complaint about stray characters.
+    assert "a" * 20 not in described
+
+
+def test_checksums_are_not_sent_as_chunked_trailers(monkeypatch):
+    """botocore 1.36+ attaches a CRC32 trailer that not every S3-compatible
+    service accepts; plain payload signing is what they're built against."""
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+    config = store.client.meta.config
+    assert config.request_checksum_calculation == "when_required"
+    assert config.response_checksum_validation == "when_required"
+    assert config.s3["addressing_style"] == "path"
+
+
+def test_an_older_botocore_without_checksum_options_still_builds(monkeypatch):
+    """The two options postdate boto3 1.34, which requirements still allow."""
+    from botocore.config import Config as RealConfig
+
+    class OldConfig(RealConfig):
+        def __init__(self, **kwargs):
+            for unsupported in ("request_checksum_calculation", "response_checksum_validation"):
+                if unsupported in kwargs:
+                    raise TypeError(f"unexpected keyword argument '{unsupported}'")
+            super().__init__(**kwargs)
+
+    monkeypatch.setattr(storage, "Config", OldConfig, raising=False)
+    import boto3
+
+    captured = {}
+    monkeypatch.setattr(
+        boto3,
+        "client",
+        lambda *a, **k: captured.update(k)
+        or type("c", (), {"meta": type("m", (), {"events": type("e", (), {"register": staticmethod(lambda *a, **k: None)})()})()})(),
+    )
+
+    store = storage.S3ObjectStore(
+        endpoint_url="https://example.supabase.co/storage/v1/s3",
+        region="us-east-1",
+        bucket="product-images",
+        access_key_id="key",
+        secret_access_key="secret",
+    )
+    store.client
+    # Built anyway, keeping the option that does exist.
+    assert captured["config"].s3["addressing_style"] == "path"
