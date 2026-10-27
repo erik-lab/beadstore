@@ -181,6 +181,24 @@ The UI reports the underlying reason rather than a flat "couldn't load", so a
 502 naming storage is distinguishable from a network blip — that distinction
 is what made this diagnosable at all.
 
+### Why development uses the same bucket as production
+
+The tempting fix, when photos won't load locally, is to point the machine back
+at local storage so the files reappear. Don't: it trades one broken view for
+two.
+
+Every environment here shares **one Supabase database**, so the
+`product_images` rows are shared whether the files are or not. Local storage
+means photos uploaded on the PC exist only on the PC, and photos uploaded
+anywhere else are broken on it — in both directions, permanently, for every
+new photo. One shared bucket is what keeps rows and files agreeing.
+
+`STORAGE_BACKEND=local` is for a machine working against its own local
+database, which is the only situation where files living locally is coherent.
+The real separation to want eventually is a second Supabase project for
+development — database *and* bucket — rather than splitting storage from the
+database it's indexed by.
+
 ## Checking a deployment's storage
 
 ```bash

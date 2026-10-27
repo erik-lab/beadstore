@@ -49,6 +49,7 @@ def main() -> int:
 
     store = get_object_store()
     backend = (settings.storage_backend or "local").lower()
+    local_default = Path(settings.storage_local_root).resolve()
 
     print(f"Storage backend: {backend} ({type(store).__name__})")
     if copy_from_local:
@@ -132,11 +133,23 @@ def main() -> int:
             if not copy_from_local and backend != "local":
                 print(
                     "\nIf the files are still on this machine from before the switch, run:\n"
-                    "  python -m scripts.check_product_images --copy-from-local\n"
+                    f"  python -m scripts.check_product_images --copy-from-local {local_default}\n"
                     "Otherwise remove the photos in the UI and upload them again."
                 )
             else:
                 print("\nRemove them in the UI and upload again.")
+
+            if backend != "local":
+                # The tempting fix is to switch this machine back to local
+                # storage so the files reappear. That trades one broken view
+                # for two, and is worth saying before anyone tries it.
+                print(
+                    "\nDon't fix this by switching STORAGE_BACKEND back to 'local'. Every\n"
+                    "environment shares one database, so the rows are shared whether the files\n"
+                    "are or not: local storage would make these six load here and stay broken\n"
+                    "everywhere else, and break every NEW photo on the other side too. One\n"
+                    "shared bucket is what keeps rows and files agreeing."
+                )
             return 1
 
         print("\nAll recovered.")
