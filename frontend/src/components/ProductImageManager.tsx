@@ -14,7 +14,13 @@ import {
 import type { ProductImage } from "../lib/types";
 import { Loading, EmptyState, ErrorState } from "./States";
 
-export const IMAGE_FILE_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,image/tiff";
+// Includes the iPhone formats explicitly. Safari reports a Portrait or HDR
+// shot as image/jpeg but the file is an MPO container, and HEIC needs naming
+// too or the picker greys those photos out entirely. The extensions are
+// listed as well because iOS doesn't always supply a MIME type.
+export const IMAGE_FILE_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,image/tiff,image/mpo," +
+  ".jpg,.jpeg,.png,.webp,.heic,.heif,.tif,.tiff,.mpo";
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof ImageTooLargeError) return err.message;
@@ -64,7 +70,13 @@ function ImageCard({
     <div className="image-card">
       <div className="image-card-preview">
         {error ? (
-          <div className="state state-error">Couldn't load this image.</div>
+          // The reason, not just the fact. A 502 naming storage means the
+          // file isn't in the bucket — which is what happens to photos
+          // uploaded before the storage backend was switched, and is
+          // otherwise indistinguishable from a network blip.
+          <div className="state state-error" style={{ fontSize: 12, padding: 8 }}>
+            Couldn't load this image — {error}
+          </div>
         ) : src ? (
           <img src={src} alt={image.alt_text ?? ""} />
         ) : (

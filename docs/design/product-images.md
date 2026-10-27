@@ -81,6 +81,24 @@ progressive JPEG at quality 88.
 Limits: 15MB per upload, 50M pixels decoded (a small file can decompress into
 an enormous bitmap), 10 images per product because that's Etsy's ceiling.
 
+### iPhone formats
+
+Two traps, both found by Patti's phone rather than by design:
+
+- **MPO.** An iPhone HDR or Portrait shot is an MPO — several JPEGs in one
+  container. Pillow decodes its first frame without complaint; the
+  accepted-formats list was the only thing rejecting them. Since everything is
+  re-encoded anyway, accepting MPO *is* the conversion.
+- **HEIC.** Pillow cannot decode HEIC on its own, and HEIC is an iPhone's
+  default. It was listed as supported and in the file picker's `accept` while
+  being impossible to upload — the worst of both. `pillow-heif` now provides
+  the decoder, registered on first use; without the package a `.heic` upload
+  gets a 503 naming it, plus the Settings > Camera > Formats > "Most
+  Compatible" workaround that needs no server change.
+
+The picker's `accept` also lists bare extensions, because iOS doesn't reliably
+supply a MIME type and the picker otherwise greys those photos out.
+
 ## Ordering
 
 One `sort_order` column, lowest first, and the first image is the primary one
@@ -135,6 +153,33 @@ shouldn't be echoed out where it could be fed back into a storage call.
 Serving responses carry `Cache-Control: private, max-age=31536000, immutable`
 — the bytes at a given image id never change, because an edit uploads a new
 image.
+
+## When a photo won't load
+
+A photo is two things: a `product_images` row and an object in the storage
+backend, and they can diverge. The usual way is **switching backends**: photos
+uploaded while `STORAGE_BACKEND=local` are files on one machine's disk, while
+the row lives in the shared database — so every other machine, and the
+deployed app, has the row and no file. It presents as a photo that won't load
+on one device and loads fine on another.
+
+```bash
+cd backend && python -m scripts.check_product_images
+```
+
+Lists every photo whose file is missing from the configured backend. To
+rescue them instead of re-uploading by hand:
+
+```bash
+python -m scripts.check_product_images --copy-from-local /path/to/old/uploads
+```
+
+The directory defaults to `STORAGE_LOCAL_ROOT` and is worth giving explicitly,
+since the old location usually isn't where that setting now points.
+
+The UI reports the underlying reason rather than a flat "couldn't load", so a
+502 naming storage is distinguishable from a network blip — that distinction
+is what made this diagnosable at all.
 
 ## Checking a deployment's storage
 

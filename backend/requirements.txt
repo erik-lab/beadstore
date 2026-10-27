@@ -11,7 +11,11 @@ psycopg2-binary>=2.9,<3.0
 # without it still serves every other intake format.
 openpyxl>=3.1,<4.0
 # Product photos: decoding, EXIF/GPS stripping and resizing. Imported lazily.
-pillow>=10.3,<12.0
+pillow>=10.3,<14.0
+# HEIC/HEIF support for Pillow, which can't decode them alone — and HEIC is
+# what an iPhone shoots by default. Optional: every other format still works
+# without it, and the error for a HEIC then says to install it.
+pillow-heif>=0.16,<2.0
 # S3-compatible object storage (Supabase Storage on Render). Imported lazily,
 # so local-filesystem storage works without it.
 boto3>=1.34,<2.0

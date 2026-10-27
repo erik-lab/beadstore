@@ -219,7 +219,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-336 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+347 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive

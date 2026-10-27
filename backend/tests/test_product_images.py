@@ -932,3 +932,91 @@ def test_an_older_botocore_without_checksum_options_still_builds(monkeypatch):
     store.client
     # Built anyway, keeping the option that does exist.
     assert captured["config"].s3["addressing_style"] == "path"
+
+
+# --------------------------------------------------------------------------
+# iPhone formats
+# --------------------------------------------------------------------------
+
+def make_mpo_bytes(size=(900, 700)) -> bytes:
+    """An MPO: what an iPhone produces for HDR and Portrait shots.
+
+    Several JPEGs in one container. Pillow decodes the first frame happily —
+    it was only the accepted-formats list that rejected these.
+    """
+    base = Image.new("RGB", size, (200, 200, 200))
+    base.paste(Image.new("RGB", (size[0] // 2, size[1] // 2), (30, 90, 200)), (0, 0))
+    buffer = io.BytesIO()
+    base.save(buffer, format="MPO", append_images=[base.copy()])
+    return buffer.getvalue()
+
+
+def test_an_iphone_mpo_is_accepted_and_stored_as_jpeg():
+    raw = make_mpo_bytes()
+    assert Image.open(io.BytesIO(raw)).format == "MPO", "fixture should really be an MPO"
+
+    processed, content_type, width, height = image_service.process_image(raw, "IMG_4821.MPO")
+
+    assert content_type == "image/jpeg"
+    assert (width, height) == (900, 700)
+    # Converted, not merely passed through — a single-frame JPEG comes out.
+    stored = Image.open(io.BytesIO(processed))
+    assert stored.format == "JPEG"
+    assert getattr(stored, "n_frames", 1) == 1
+
+
+def test_an_mpo_uploads_through_the_api(client, auth_headers, db_session):
+    product = create_product(client, auth_headers, db_session)
+    resp = upload(client, auth_headers, product["id"], make_mpo_bytes(), filename="IMG_4821.MPO")
+    assert resp.status_code == 201, resp.json()
+    assert resp.json()["content_type"] == "image/jpeg"
+
+
+def test_mpo_still_has_its_metadata_stripped():
+    """The re-encode has to apply to these too — iPhone shots are exactly the
+    ones carrying GPS."""
+    exif = Image.Exif()
+    exif[0x010F] = "Apple"
+    exif[0x0110] = "iPhone"
+
+    base = Image.new("RGB", (800, 600), (150, 150, 150))
+    buffer = io.BytesIO()
+    base.save(buffer, format="MPO", append_images=[base.copy()], exif=exif.tobytes())
+    raw = buffer.getvalue()
+    assert dict(Image.open(io.BytesIO(raw)).getexif()), "fixture should carry EXIF"
+
+    processed, _, _, _ = image_service.process_image(raw, "IMG_4821.MPO")
+    assert not dict(Image.open(io.BytesIO(processed)).getexif())
+
+
+def test_heic_without_the_decoder_says_what_to_install(monkeypatch):
+    """HEIC is what an iPhone shoots by default, and Pillow can't read it
+    alone. "Unreadable" would be misleading when the answer is a package."""
+    monkeypatch.setattr(image_service, "_heif_registered", False)
+    monkeypatch.setattr(image_service, "_register_heif", lambda _Image: None)
+
+    with pytest.raises(Exception) as exc:
+        image_service.process_image(b"\x00\x00\x00 ftypheic not really", "IMG_4822.HEIC")
+
+    assert exc.value.status_code == 503
+    assert "pillow-heif" in exc.value.detail
+    # And a way forward that doesn't require the server to change.
+    assert "Most Compatible" in exc.value.detail
+
+
+def test_a_non_image_still_fails_as_a_bad_image_not_a_missing_package(monkeypatch):
+    """The HEIC branch must key off the filename, not swallow every failure."""
+    monkeypatch.setattr(image_service, "_heif_registered", False)
+    with pytest.raises(Exception) as exc:
+        image_service.process_image(b"this is not an image", "notes.txt")
+    assert exc.value.status_code == 400
+
+
+def test_heic_is_decodable_when_pillow_heif_is_installed():
+    """Guards the registration wiring: if this fails, HEIC is advertised in
+    the UI's file picker while being impossible to upload."""
+    pytest.importorskip("pillow_heif")
+    image_service._heif_registered = False
+    Image_, _ = image_service._pillow()
+    Image_.init()
+    assert "HEIF" in Image_.OPEN

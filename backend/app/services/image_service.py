@@ -38,14 +38,46 @@ JPEG_QUALITY = 88
 
 # What we accept in, keyed to how Pillow names the format. Everything is
 # re-encoded to JPEG except PNG, which is kept for images with transparency.
-ACCEPTED_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "BMP", "TIFF", "HEIF", "HEIC"}
+# What we accept in, keyed to Pillow's own format names. Everything is
+# re-encoded on the way out, so an accepted format doesn't have to be one
+# we'd ever store — MPO in particular is what an iPhone produces for HDR and
+# Portrait shots (several JPEGs in one file). Pillow decodes its first frame
+# happily; it was only this list that rejected it.
+ACCEPTED_FORMATS = {"JPEG", "JPEG2000", "PNG", "WEBP", "GIF", "BMP", "TIFF", "MPO", "HEIF", "HEIC"}
 MAX_IMAGES_PER_PRODUCT = 10
+
+
+_heif_registered = False
+
+
+def _register_heif(Image) -> None:
+    """Teach Pillow to read HEIC/HEIF, which iPhones shoot by default.
+
+    Pillow can't decode these on its own — it needs pillow-heif, which
+    registers an opener. Without it an iPhone photo failed as "could not be
+    read as an image" even though HEIC was advertised as supported, which is
+    a worse outcome than not offering it at all.
+
+    Missing package is not fatal: every other format still works, and the
+    error for a HEIC then says what to install.
+    """
+    global _heif_registered
+    if _heif_registered:
+        return
+    try:
+        import pillow_heif
+    except ImportError:
+        return
+    pillow_heif.register_heif_opener()
+    Image.init()
+    _heif_registered = True
 
 
 def _pillow():
     try:
         from PIL import Image, ImageOps
 
+        _register_heif(Image)
         return Image, ImageOps
     except ImportError:
         raise HTTPException(
@@ -84,6 +116,19 @@ def process_image(data: bytes, filename: str = "") -> tuple[bytes, str, int, int
         source = Image.open(io.BytesIO(data))
         source.load()
     except Exception:  # noqa: BLE001 - Pillow raises many types for bad input
+        # HEIC gets its own message: it's what an iPhone shoots by default,
+        # so "unreadable" is misleading when the real answer is a missing
+        # server package.
+        if not _heif_registered and (filename or "").lower().endswith((".heic", ".heif")):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Reading HEIC photos needs the pillow-heif package on the server "
+                    "(pip install -r requirements.txt). Until then, set the iPhone's camera to "
+                    '"Most Compatible" (Settings > Camera > Formats) so it shoots JPEG, or '
+                    "send the photo to yourself first, which converts it."
+                ),
+            )
         raise _bad_image(
             f"Could not read '{filename or 'that file'}' as an image. "
             "JPEG, PNG, WEBP, HEIC and TIFF all work."
