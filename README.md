@@ -317,11 +317,14 @@ Supabase project:
   generated from the OpenAPI spec (noted as a recommendation in the design doc; not done in this
   pass).
 - No pagination controls in the UI yet, though list endpoints support `limit`/`offset`.
-- Product photos have storage and an API (see `docs/design/product-images.md`) but **no upload UI
-  yet**, and nothing pushes them to Etsy. The older `image_url` / `image_status` / `media_notes`
-  columns on `products` are superseded by the `product_images` table and remain unused.
-- The Supabase Storage backend has never been exercised against real Supabase from this
-  environment; local-filesystem storage is what the tests drive.
+- Product photos have storage, an API and an upload UI (see
+  `docs/design/product-images.md`), but **nothing pushes them to Etsy yet** — that needs
+  `uploadListingImage` and `updateListing(state=active)`. The older `image_url` / `image_status` /
+  `media_notes` columns on `products` are superseded by the `product_images` table and remain
+  unused.
+- The Supabase Storage backend has been verified against a real bucket with
+  `python -m scripts.check_storage`. The automated tests still drive local-filesystem storage
+  only, since CI has no Supabase to reach; what's covered for S3 is the wiring, not a live call.
 - `lot` remains a valid backend unit type for internal costing use but is intentionally excluded
   from the UI's unit-type dropdown. Import Inventory's AI parser is held to the same list, so it
   can't propose a unit the review screen couldn't show selected.

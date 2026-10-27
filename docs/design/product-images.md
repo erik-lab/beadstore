@@ -189,9 +189,32 @@ would have 404'd.
 - **`products.image_url` / `image_status` / `media_notes` still exist** and are
   still unused. They predate this table and were left alone rather than
   dropped as a side effect; removing them is its own decision.
-- **The Supabase backend is untested against real Supabase.** Everything here
-  is driven against `LocalObjectStore`, which the tests exercise for real
-  rather than mocking. `S3ObjectStore`'s wiring — path-style addressing,
-  lazy boto3 import, credential validation — is covered, but no call has ever
-  reached a Supabase bucket from this environment. Same honesty as the Etsy
-  simulator: first real upload is the test.
+- **Nothing pushes photos to Etsy yet.** `uploadListingImage` plus
+  `updateListing(state=active)` is the step that makes a listing visible; see
+  the pre-flight checklist in `api-tiers-work-plan.md`.
+
+The Supabase backend **has** now been verified against a real bucket, by
+`scripts.check_storage` writing, reading back, stat-checking and deleting an
+object. The automated tests still drive `LocalObjectStore` only — there is no
+Supabase to reach from CI — so `S3ObjectStore`'s coverage remains its wiring:
+path-style addressing, the checksum options, the CA bundle, credential
+validation, and error reporting.
+
+What that first real connection cost is worth recording, because all of it was
+diagnosis rather than code:
+
+| Symptom | Actual cause |
+|---|---|
+| `CERTIFICATE_VERIFY_FAILED` | HTTPS interception on the dev machine; fixed with `USE_SYSTEM_TRUST_STORE` |
+| ...still failing after setting `AWS_CA_BUNDLE` in `.env` | that name is never read from `.env` — pydantic-settings doesn't export to `os.environ` |
+| "truststore isn't installed" when it was | installed under a different interpreter than the one running |
+| `HTTP 403` with no code | botocore couldn't parse Supabase's error body; the status was being discarded too |
+| `InvalidAccessKeyId` | a stray character in the key id |
+| `SignatureDoesNotMatch` | the secret truncated to 63 of 64 characters on paste |
+| `NoSuchBucket` | the bucket existed under a different name |
+
+Each one was slower than it needed to be because the error reporting threw
+away the fact that identified it. The script now names the interpreter, states
+the trust-store status, describes the secret's shape without printing it, and
+quotes the service's own error code — which is why the last two were one
+round each.
