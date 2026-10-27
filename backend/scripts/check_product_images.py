@@ -82,6 +82,11 @@ def main() -> int:
         local = LocalObjectStore(source_root)
 
         present, missing, recovered, unrecoverable = 0, [], 0, []
+        # Two very different reasons a photo can't be recovered, and conflating
+        # them sends you looking in the wrong place: the source directory
+        # doesn't have the file (so it was never on this machine), or it does
+        # and the upload failed (so the backend is misconfigured).
+        absent_from_source, upload_failed = 0, 0
         for image, product_name in images:
             try:
                 exists = store.exists(image.storage_key)
@@ -99,6 +104,7 @@ def main() -> int:
 
             if not local.exists(image.storage_key):
                 unrecoverable.append((image, product_name))
+                absent_from_source += 1
                 continue
             try:
                 store.put(image.storage_key, local.get(image.storage_key), image.content_type)
@@ -106,6 +112,7 @@ def main() -> int:
                 print(f"  recovered  {product_name}  {image.storage_key}")
             except StorageError as exc:
                 unrecoverable.append((image, product_name))
+                upload_failed += 1
                 print(f"  FAILED     {product_name}  {image.storage_key}: {exc}")
 
         print(f"{len(images)} photo(s) recorded; {present} present in storage.")
@@ -115,7 +122,11 @@ def main() -> int:
             return 0
 
         if copy_from_local:
-            print(f"{recovered} recovered from local storage.")
+            print(f"{recovered} recovered from {source_root}.")
+            if absent_from_source:
+                print(f"{absent_from_source} not found there at all.")
+            if upload_failed:
+                print(f"{upload_failed} found there, but the upload failed (see FAILED above).")
             still_missing = unrecoverable
         else:
             still_missing = missing
@@ -125,12 +136,29 @@ def main() -> int:
             for image, product_name in still_missing:
                 print(f"  {product_name}  —  {image.storage_key}")
             print(
-                "\nThese were almost certainly uploaded while STORAGE_BACKEND was set to\n"
-                "something else — most often 'local', which stores files on one machine's\n"
-                "disk while the row lives in the shared database. The row is real; the file\n"
-                "just isn't here."
+                "\nThese were uploaded while STORAGE_BACKEND was 'local', which writes to one\n"
+                "machine's disk while the row goes to the shared database. The row is real;\n"
+                "the file just isn't in this backend. Which machine's disk matters:"
             )
-            if not copy_from_local and backend != "local":
+            print(
+                "\n  - A developer's PC. The file is still there, and --copy-from-local can\n"
+                "    upload it into the configured backend.\n"
+                "  - A deployed host (Render). Its filesystem is disposable, so the file was\n"
+                "    destroyed on the next deploy. Nothing can recover it."
+            )
+            if copy_from_local and absent_from_source and not upload_failed:
+                # The directory was searched and came up empty, so the first
+                # case is ruled out for these. Say so, rather than repeating
+                # advice to go looking on a machine we just looked at.
+                print(
+                    f"\nNone of these were in {source_root}, so they didn't come from this\n"
+                    "machine's disk. If they were uploaded through the deployed app while its\n"
+                    "STORAGE_BACKEND was unset, they're gone — delete them in the UI and upload\n"
+                    "again. Before giving up, it's worth searching this machine for one of the\n"
+                    "filenames above in case an older STORAGE_LOCAL_ROOT put it elsewhere, and\n"
+                    "passing that directory as --copy-from-local DIR."
+                )
+            elif not copy_from_local and backend != "local":
                 print(
                     "\nIf the files are still on this machine from before the switch, run:\n"
                     f"  python -m scripts.check_product_images --copy-from-local {local_default}\n"
@@ -146,9 +174,9 @@ def main() -> int:
                 print(
                     "\nDon't fix this by switching STORAGE_BACKEND back to 'local'. Every\n"
                     "environment shares one database, so the rows are shared whether the files\n"
-                    "are or not: local storage would make these six load here and stay broken\n"
-                    "everywhere else, and break every NEW photo on the other side too. One\n"
-                    "shared bucket is what keeps rows and files agreeing."
+                    "are or not: local storage would at best make these load here and stay\n"
+                    "broken everywhere else, and would break every NEW photo on the other side\n"
+                    "too. One shared bucket is what keeps rows and files agreeing."
                 )
             return 1
 
