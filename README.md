@@ -248,7 +248,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-342 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+347 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
@@ -357,6 +357,11 @@ Supabase project:
 - `updateListing`'s `state` parameter is implemented from Etsy's documented listing states but was
   never confirmed as settable through that call by any published source — if activation fails
   against the real API, check that first.
+- A deployed environment (Render) **must** set `STORAGE_BACKEND=s3`, not just the
+  `STORAGE_S3_*` values. The default is `local`, and local storage on a platform with a
+  disposable filesystem accepts uploads, serves them back, and loses every file on the next
+  deploy — with no symptom until then. The app now refuses local storage when it detects a
+  deployed host rather than allowing that silently.
 - The Supabase Storage backend has been verified against a real bucket with
   `python -m scripts.check_storage`. The automated tests still drive local-filesystem storage
   only, since CI has no Supabase to reach; what's covered for S3 is the wiring, not a live call.

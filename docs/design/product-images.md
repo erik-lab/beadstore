@@ -20,7 +20,19 @@ alternatives were weighed as:
 `put`/`get`/`delete`/`exists`/`public_url` — and two implementations:
 
 - **`LocalObjectStore`** writes under `STORAGE_LOCAL_ROOT`. No credentials, no
-  setup, creates its directory on demand. Development only.
+  setup, creates its directory on demand. Development only — and now enforced
+  as such: `get_object_store` refuses local storage when it looks deployed
+  (`RENDER` set in the environment, or `ENV` anything but local/test).
+
+  That guard exists because the failure it prevents has no symptom. Local
+  storage on Render accepts the upload, serves the photo back, and looks
+  entirely correct — then loses every file on the next deploy. It went
+  unnoticed for days on this project: the S3 keys were set in Render but
+  `STORAGE_BACKEND` wasn't, so it quietly defaulted to local. `ENV` alone
+  wouldn't have caught it either, since that was never set and so still read
+  "local"; the platform's own `RENDER` variable is what makes the check
+  reliable. It raises from the storage path only, so the rest of the app
+  keeps serving.
 - **`S3ObjectStore`** talks to any S3-compatible endpoint; here, Supabase
   Storage. `boto3` is imported lazily so a virtualenv without it still runs
   the whole app on local storage.

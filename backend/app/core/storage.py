@@ -14,6 +14,7 @@ Keys are relative paths like `products/<uuid>/<uuid>.jpg`. They're generated
 server-side, never taken from a filename, and validated here anyway — a key
 is the one thing in this module that could otherwise escape its directory.
 """
+import os
 import re
 import shutil
 from abc import ABC, abstractmethod
@@ -294,11 +295,44 @@ class S3ObjectStore(ObjectStore):
         return f"{self.public_base_url}/{validate_key(key)}"
 
 
+def looks_deployed() -> tuple[bool, str]:
+    """Whether this process is running somewhere with a disposable filesystem.
+
+    Checked because local storage on such a host loses every uploaded file on
+    the next deploy, silently: the upload succeeds, the photo displays, and
+    it's gone by morning. The failure has no symptom until the deploy, by
+    which time the originals may be gone too.
+
+    RENDER is set by the platform itself, so it catches the case ENV alone
+    misses — a deployment where ENV was never set and so still reads "local".
+    """
+    if os.environ.get("RENDER"):
+        return True, "RENDER is set in the environment"
+    env = (settings.env or "local").lower()
+    if env not in ("local", "test"):
+        return True, f"ENV is {env!r}"
+    return False, ""
+
+
 @lru_cache
 def get_object_store() -> ObjectStore:
     """The store this deployment uses, per STORAGE_BACKEND."""
     backend = (settings.storage_backend or "local").lower()
     if backend == "local":
+        deployed, why = looks_deployed()
+        if deployed:
+            # Refused rather than warned. A warning in a log nobody reads is
+            # how photos get lost; and this raises from the storage path
+            # only, so the app keeps serving everything else.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "STORAGE_BACKEND is 'local', but this looks like a deployed environment "
+                    f"({why}). A deployed filesystem is wiped on every deploy, so photos saved "
+                    "there would be lost without warning. Set STORAGE_BACKEND=s3 and the "
+                    "STORAGE_S3_* values in this environment's settings."
+                ),
+            )
         return LocalObjectStore(settings.storage_local_root)
     if backend == "s3":
         missing = [

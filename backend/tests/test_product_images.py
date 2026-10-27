@@ -1020,3 +1020,78 @@ def test_heic_is_decodable_when_pillow_heif_is_installed():
     Image_, _ = image_service._pillow()
     Image_.init()
     assert "HEIF" in Image_.OPEN
+
+
+# --------------------------------------------------------------------------
+# Guard against local storage on a disposable filesystem
+# --------------------------------------------------------------------------
+
+def test_local_storage_is_refused_on_a_deployed_host(monkeypatch):
+    """Render's filesystem is wiped on every deploy.
+
+    Local storage there succeeds, displays the photo, and loses it at the
+    next deploy — a failure with no symptom until the originals may also be
+    gone. Refused rather than warned, because the warning goes in a log
+    nobody reads.
+    """
+    monkeypatch.setattr(settings, "storage_backend", "local")
+    monkeypatch.setenv("RENDER", "srv-abc123")
+    storage.get_object_store.cache_clear()
+
+    with pytest.raises(Exception) as exc:
+        storage.get_object_store()
+    assert exc.value.status_code == 503
+    assert "wiped on every deploy" in exc.value.detail
+    assert "STORAGE_BACKEND=s3" in exc.value.detail
+    storage.get_object_store.cache_clear()
+
+
+def test_a_non_local_env_also_counts_as_deployed(monkeypatch):
+    monkeypatch.setattr(settings, "storage_backend", "local")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setattr(settings, "env", "production")
+    storage.get_object_store.cache_clear()
+
+    with pytest.raises(Exception) as exc:
+        storage.get_object_store()
+    assert "ENV is 'production'" in exc.value.detail
+    storage.get_object_store.cache_clear()
+
+
+def test_the_platform_signal_catches_an_unset_env(monkeypatch):
+    """ENV defaults to "local", so it alone would miss a deployment where it
+    was never set — which is exactly how this went unnoticed."""
+    monkeypatch.setattr(settings, "storage_backend", "local")
+    monkeypatch.setattr(settings, "env", "local")
+    monkeypatch.setenv("RENDER", "srv-abc123")
+    storage.get_object_store.cache_clear()
+
+    deployed, why = storage.looks_deployed()
+    assert deployed is True
+    assert "RENDER" in why
+    storage.get_object_store.cache_clear()
+
+
+def test_object_storage_on_a_deployed_host_is_fine(monkeypatch):
+    """The guard is about local storage, not about being deployed."""
+    monkeypatch.setenv("RENDER", "srv-abc123")
+    monkeypatch.setattr(settings, "storage_backend", "s3")
+    monkeypatch.setattr(settings, "storage_s3_endpoint_url", "https://example.supabase.co/storage/v1/s3")
+    monkeypatch.setattr(settings, "storage_s3_region", "us-east-1")
+    monkeypatch.setattr(settings, "storage_s3_bucket", "product-images")
+    monkeypatch.setattr(settings, "storage_s3_access_key_id", "key")
+    monkeypatch.setattr(settings, "storage_s3_secret_access_key", "secret")
+    storage.get_object_store.cache_clear()
+
+    assert isinstance(storage.get_object_store(), storage.S3ObjectStore)
+    storage.get_object_store.cache_clear()
+
+
+def test_local_storage_is_allowed_in_development(monkeypatch):
+    monkeypatch.setattr(settings, "storage_backend", "local")
+    monkeypatch.setattr(settings, "env", "local")
+    monkeypatch.delenv("RENDER", raising=False)
+    storage.get_object_store.cache_clear()
+
+    assert isinstance(storage.get_object_store(), storage.LocalObjectStore)
+    storage.get_object_store.cache_clear()
