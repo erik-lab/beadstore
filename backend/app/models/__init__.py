@@ -4,6 +4,7 @@ from app.models.audit_log import AuditLog
 from app.models.catalog_listing import CatalogListing
 from app.models.email_account import EmailAccount
 from app.models.etsy_account import EtsyAccount
+from app.models.etsy_listing_image import EtsyListingImage
 from app.models.etsy_listing_sync import EtsyListingSync
 from app.models.hint import Hint
 from app.models.inventory_adjustment import InventoryAdjustment
@@ -28,6 +29,7 @@ __all__ = [
     "CatalogListing",
     "EmailAccount",
     "EtsyAccount",
+    "EtsyListingImage",
     "EtsyListingSync",
     "Hint",
     "InventoryAdjustment",

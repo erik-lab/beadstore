@@ -275,18 +275,26 @@ Ordered by what blocks what.
 
 **Worth knowing, not necessarily fixing first**
 
-5. **The webhook signature scheme is a guess.** `POST /etsy/webhook` verifies
+5. **`updateListing`'s `state` parameter is unverified.** The path and method
+   are confirmed (`PATCH /v3/application/shops/{shop_id}/listings/{listing_id}`),
+   and Etsy's listing states are documented as draft/active/inactive, but no
+   published source confirmed that `state` is settable through that call —
+   only that those are the states a listing can be in. If activation fails
+   against the real API, this is the first thing to check. Same category as
+   the webhook signature below: the simulator agrees with us because both
+   were written from the same reading.
+6. **The webhook signature scheme is a guess.** `POST /etsy/webhook` verifies
    `X-Etsy-Signature` as a hex HMAC-SHA256 of the raw body, and the simulator signs the same way,
    so the test proves the two agree with each other — not that either matches Etsy. Expect to
    adjust on first real delivery. The polling path (`pull_receipts`) is the safety net and needs
    no webhook at all.
-6. **No rate-limit handling.** Etsy allows 10 requests/second and 10,000/day; nothing backs off
+7. **No rate-limit handling.** Etsy allows 10 requests/second and 10,000/day; nothing backs off
    or retries on a 429. Irrelevant at Patti's volume, a problem for a bulk push of a few hundred
    listings.
-7. **An access token is minted per operation.** Every push and pull does a refresh round trip
+8. **An access token is minted per operation.** Every push and pull does a refresh round trip
    first. Correct, just chatty — caching until expiry is the obvious improvement if the call
    volume ever matters.
-8. **Probably no sandbox.** No official Etsy test environment turned up; community guidance is to
+9. **Probably no sandbox.** No official Etsy test environment turned up; community guidance is to
    test against a real shop using drafts, which are free, where publishing a listing carries
    Etsy's usual per-listing fee. Treat "test site" as "real shop, draft listings" and keep the
    simulator for everything that doesn't need to touch Etsy.

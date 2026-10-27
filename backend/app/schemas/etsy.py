@@ -39,6 +39,21 @@ class EtsyPushRequest(BaseModel):
     is_supply: bool | None = None
 
 
+class EtsyListingImageRead(ORMModel):
+    """One photo as it exists on Etsy for a listing. rank 1 is primary."""
+
+    id: uuid.UUID
+    product_image_id: uuid.UUID | None
+    etsy_image_id: str
+    rank: int
+
+
+class EtsyActivateResult(BaseModel):
+    catalog_listing_id: uuid.UUID
+    etsy_listing_id: str | None
+    etsy_state: str | None
+
+
 class EtsyListingSyncRead(ORMModel):
     id: uuid.UUID
     catalog_listing_id: uuid.UUID
@@ -47,6 +62,7 @@ class EtsyListingSyncRead(ORMModel):
     sync_status: EtsySyncStatus
     last_synced_at: datetime | None
     last_error: str | None
+    etsy_state: str | None = None
 
 
 class EtsyPullResult(BaseModel):

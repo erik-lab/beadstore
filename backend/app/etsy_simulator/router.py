@@ -11,6 +11,7 @@ thing.
 """
 import base64
 import hashlib
+import re
 import secrets
 import time
 from urllib.parse import urlencode
@@ -309,6 +310,133 @@ async def update_listing_inventory(
     body = await request.json()
     listing["products"] = body.get("products", [])
     return {"listing_id": listing_id, "products": listing["products"]}
+
+
+def _parse_multipart(body: bytes, content_type: str) -> dict:
+    """Pull the fields we care about out of a multipart body.
+
+    Hand-rolled rather than using FastAPI's UploadFile, which needs
+    python-multipart — a dependency the real app has no use for, since it
+    only ever *sends* multipart. The simulator doesn't need the pixels
+    either, just the field values and the fact that a file part arrived, so
+    this stays a long way short of a real parser.
+    """
+    boundary_marker = "boundary="
+    if boundary_marker not in content_type:
+        raise HTTPException(status_code=400, detail="Expected a multipart body")
+    boundary = content_type.split(boundary_marker, 1)[1].strip().strip('"')
+    fields: dict = {}
+
+    for part in body.split(f"--{boundary}".encode()):
+        if b"\r\n\r\n" not in part:
+            continue
+        raw_headers, payload = part.split(b"\r\n\r\n", 1)
+        headers = raw_headers.decode("utf-8", errors="replace")
+        match = re.search(r'name="([^"]+)"', headers)
+        if not match:
+            continue
+        name = match.group(1)
+        payload = payload.rstrip(b"\r\n-")
+        filename = re.search(r'filename="([^"]*)"', headers)
+        if filename:
+            fields[name] = {"filename": filename.group(1), "size": len(payload)}
+        else:
+            fields[name] = payload.decode("utf-8", errors="replace")
+    return fields
+
+
+@router.post("/v3/application/shops/{shop_id}/listings/{listing_id}/images", status_code=201)
+async def upload_listing_image(
+    shop_id: str,
+    listing_id: str,
+    request: Request,
+    token: dict = Depends(_require_access_token),
+    api_key: str = Depends(_require_api_key),
+):
+    if token["shop_id"] != shop_id:
+        raise HTTPException(status_code=403, detail="Token is not authorized for this shop")
+    if "listings_w" not in token["scope"].split():
+        raise HTTPException(status_code=403, detail="Missing required scope: listings_w")
+    listing = store.listings.get(listing_id)
+    if listing is None or listing["shop_id"] != shop_id:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    fields = _parse_multipart(await request.body(), request.headers.get("content-type", ""))
+    image_part = fields.get("image")
+    if not isinstance(image_part, dict) or image_part["size"] == 0:
+        raise HTTPException(status_code=400, detail="No image file was sent")
+
+    images = listing.setdefault("images", [])
+    # Real Etsy caps a listing at 10 images.
+    if len(images) >= 10:
+        raise HTTPException(status_code=400, detail="A listing can hold at most 10 images")
+
+    image = {
+        "listing_image_id": store.next_image_id(),
+        "listing_id": listing_id,
+        "rank": int(fields.get("rank") or len(images) + 1),
+        "alt_text": fields.get("alt_text") or None,
+        "filename": image_part["filename"],
+        "byte_size": image_part["size"],
+    }
+    images.append(image)
+    return image
+
+
+@router.delete("/v3/application/shops/{shop_id}/listings/{listing_id}/images/{image_id}")
+def delete_listing_image(
+    shop_id: str,
+    listing_id: str,
+    image_id: str,
+    token: dict = Depends(_require_access_token),
+    api_key: str = Depends(_require_api_key),
+):
+    if token["shop_id"] != shop_id:
+        raise HTTPException(status_code=403, detail="Token is not authorized for this shop")
+    listing = store.listings.get(listing_id)
+    if listing is None or listing["shop_id"] != shop_id:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    images = listing.setdefault("images", [])
+    remaining = [image for image in images if image["listing_image_id"] != image_id]
+    if len(remaining) == len(images):
+        raise HTTPException(status_code=404, detail="Image not found")
+    listing["images"] = remaining
+    return {"ok": True}
+
+
+@router.patch("/v3/application/shops/{shop_id}/listings/{listing_id}")
+async def update_listing(
+    shop_id: str,
+    listing_id: str,
+    request: Request,
+    token: dict = Depends(_require_access_token),
+    api_key: str = Depends(_require_api_key),
+):
+    if token["shop_id"] != shop_id:
+        raise HTTPException(status_code=403, detail="Token is not authorized for this shop")
+    if "listings_w" not in token["scope"].split():
+        raise HTTPException(status_code=403, detail="Missing required scope: listings_w")
+    listing = store.listings.get(listing_id)
+    if listing is None or listing["shop_id"] != shop_id:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    body = await request.json()
+    state = body.get("state")
+    if state is not None:
+        if state not in ("active", "inactive", "draft"):
+            raise HTTPException(status_code=400, detail=f"Invalid listing state '{state}'")
+        # Etsy won't show a listing with no photos, and refuses to activate
+        # one. Mirrored here because it's the constraint that makes the image
+        # push a prerequisite rather than a nicety.
+        if state == "active" and not listing.get("images"):
+            raise HTTPException(
+                status_code=400, detail="A listing must have at least one image to become active"
+            )
+    for field in ("title", "description", "price", "state", "taxonomy_id"):
+        if field in body:
+            listing[field] = body[field]
+    return listing
 
 
 @router.get("/v3/application/shops/{shop_id}/receipts")

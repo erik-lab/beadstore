@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from urllib.parse import urlparse
 
 import pytest
@@ -37,6 +38,10 @@ def _configure(monkeypatch):
     monkeypatch.setattr(etsy_service.httpx, "get", test_transport_client.get)
     monkeypatch.setattr(etsy_service.httpx, "post", test_transport_client.post)
     monkeypatch.setattr(etsy_service.httpx, "put", test_transport_client.put)
+    # delete and patch are needed too, for listing-image removal and the
+    # state change that activates a listing.
+    monkeypatch.setattr(etsy_service.httpx, "delete", test_transport_client.delete)
+    monkeypatch.setattr(etsy_service.httpx, "patch", test_transport_client.patch)
 
     from app.etsy_simulator.state import store
 
@@ -419,3 +424,260 @@ def test_push_sends_the_shop_sku_to_etsy_on_the_first_push(client, auth_headers)
     assert stored["products"], "inventory should have been set on the first push"
     assert stored["products"][0]["sku"] == product["sku"]
     assert sku_service.is_valid_sku(stored["products"][0]["sku"])
+
+
+# --------------------------------------------------------------------------
+# Listing images and activation
+# --------------------------------------------------------------------------
+
+PUSH_FIELDS = {
+    "taxonomy_id": 100,
+    "shipping_profile_id": 200,
+    "return_policy_id": 300,
+    "who_made": "i_did",
+    "when_made": "made_to_order",
+}
+
+
+@pytest.fixture()
+def product_photos(tmp_path, monkeypatch):
+    """Point photo storage at a temp directory for these tests."""
+    from app.core import storage
+
+    monkeypatch.setattr(settings, "storage_backend", "local")
+    monkeypatch.setattr(settings, "storage_local_root", str(tmp_path / "uploads"))
+    storage.get_object_store.cache_clear()
+    yield
+    storage.get_object_store.cache_clear()
+
+
+def _add_photo(client, auth_headers, product_id, colour=(120, 40, 90)):
+    import base64
+    import io
+
+    from PIL import Image
+
+    image = Image.new("RGB", (600, 400), (200, 200, 200))
+    image.paste(Image.new("RGB", (300, 200), colour), (0, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+
+    resp = client.post(
+        f"/api/v1/products/{product_id}/images",
+        json={"filename": "bead.jpg", "data_base64": base64.b64encode(buffer.getvalue()).decode()},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.json()
+    return resp.json()
+
+
+def _etsy_images(etsy_listing_id):
+    from app.etsy_simulator.state import store
+
+    return store.listings[etsy_listing_id].get("images", [])
+
+
+def test_push_uploads_photos_to_etsy_in_order(client, auth_headers, product_photos):
+    """The multipart upload path, driven against the simulator for real."""
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    first = _add_photo(client, auth_headers, product["id"], colour=(10, 20, 200))
+    second = _add_photo(client, auth_headers, product["id"], colour=(200, 20, 10))
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    resp = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.json()
+    etsy_listing_id = resp.json()["etsy_listing_id"]
+    assert resp.json()["etsy_state"] == "draft"
+
+    images = _etsy_images(etsy_listing_id)
+    assert [image["rank"] for image in images] == [1, 2]
+    assert all(image["byte_size"] > 0 for image in images), "the file itself should have arrived"
+    assert images[0]["filename"] == "bead.jpg"
+    # Local order is Etsy's order; rank 1 is what Etsy shows in search.
+    assert len(images) == 2
+    assert first["id"] != second["id"]
+
+
+def test_alt_text_is_sent_with_the_image(client, auth_headers, product_photos):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    image = _add_photo(client, auth_headers, product["id"])
+    client.patch(
+        f"/api/v1/products/images/{image['id']}",
+        json={"alt_text": "Matte black rounds"},
+        headers=auth_headers,
+    )
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    resp = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    )
+    assert _etsy_images(resp.json()["etsy_listing_id"])[0]["alt_text"] == "Matte black rounds"
+
+
+def test_pushing_again_without_photo_changes_does_not_re_upload(
+    client, auth_headers, product_photos
+):
+    """A price-only sync must not churn the images."""
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    _add_photo(client, auth_headers, product["id"])
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    first = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    ).json()
+    etsy_listing_id = first["etsy_listing_id"]
+    original_ids = [image["listing_image_id"] for image in _etsy_images(etsy_listing_id)]
+
+    client.post(f"/api/v1/etsy/listings/{listing['id']}/push", json={}, headers=auth_headers)
+    assert [image["listing_image_id"] for image in _etsy_images(etsy_listing_id)] == original_ids
+
+
+def test_reordering_photos_locally_reorders_them_on_etsy(client, auth_headers, product_photos):
+    """Etsy fixes rank at upload with no reorder call, so a changed order has
+    to be re-sent — otherwise the wrong photo stays primary."""
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    first = _add_photo(client, auth_headers, product["id"], colour=(10, 20, 200))
+    second = _add_photo(client, auth_headers, product["id"], colour=(200, 20, 10))
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    push = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    ).json()
+    etsy_listing_id = push["etsy_listing_id"]
+    before = _etsy_images(etsy_listing_id)
+    primary_size_before = before[0]["byte_size"]
+
+    client.patch(
+        f"/api/v1/products/{product['id']}/images/reorder",
+        json={"image_ids": [second["id"], first["id"]]},
+        headers=auth_headers,
+    )
+    client.post(f"/api/v1/etsy/listings/{listing['id']}/push", json={}, headers=auth_headers)
+
+    after = _etsy_images(etsy_listing_id)
+    assert [image["rank"] for image in after] == [1, 2]
+    assert len(after) == 2, "re-sending must not leave the old copies behind"
+    # The photo at rank 1 is now the other one.
+    assert after[0]["byte_size"] != primary_size_before
+
+
+def test_deleting_a_photo_removes_it_from_etsy(client, auth_headers, product_photos):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    keep = _add_photo(client, auth_headers, product["id"], colour=(10, 20, 200))
+    remove = _add_photo(client, auth_headers, product["id"], colour=(200, 20, 10))
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    push = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    ).json()
+    etsy_listing_id = push["etsy_listing_id"]
+    assert len(_etsy_images(etsy_listing_id)) == 2
+
+    client.delete(f"/api/v1/products/images/{remove['id']}", headers=auth_headers)
+    client.post(f"/api/v1/etsy/listings/{listing['id']}/push", json={}, headers=auth_headers)
+
+    assert len(_etsy_images(etsy_listing_id)) == 1
+    assert keep["id"] is not None
+
+
+def test_activating_makes_the_listing_live(client, auth_headers, product_photos):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    _add_photo(client, auth_headers, product["id"])
+    listing = _create_listing(client, auth_headers, product["id"])
+    push = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    ).json()
+
+    resp = client.post(f"/api/v1/etsy/listings/{listing['id']}/activate", headers=auth_headers)
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["etsy_state"] == "active"
+
+    from app.etsy_simulator.state import store
+
+    assert store.listings[push["etsy_listing_id"]]["state"] == "active"
+
+
+def test_pushing_never_activates_by_itself(client, auth_headers, product_photos):
+    """Going live is what Etsy's per-listing fee pays for — a stock sync
+    must not be able to trigger it as a side effect."""
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    _add_photo(client, auth_headers, product["id"])
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    push = client.post(
+        f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers
+    ).json()
+    assert push["etsy_state"] == "draft"
+
+    from app.etsy_simulator.state import store
+
+    assert store.listings[push["etsy_listing_id"]]["state"] == "draft"
+
+
+def test_activating_without_a_photo_is_refused_before_calling_etsy(client, auth_headers, product_photos):
+    """Etsy refuses this too; saying so here explains what to do about it."""
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    listing = _create_listing(client, auth_headers, product["id"])
+    client.post(f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers)
+
+    resp = client.post(f"/api/v1/etsy/listings/{listing['id']}/activate", headers=auth_headers)
+    assert resp.status_code == 409
+    assert "no photos" in resp.json()["detail"]
+
+
+def test_the_simulator_refuses_to_activate_without_images(client, auth_headers, product_photos):
+    """The Etsy-side constraint, not just our own pre-check.
+
+    Our pre-check is bypassed by recording a sham image row, so the request
+    actually reaches the simulator and is refused there — proving the
+    prerequisite is modelled on the Etsy side too.
+    """
+    from app.models.etsy_listing_image import EtsyListingImage
+    from app.models.etsy_listing_sync import EtsyListingSync
+
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    listing = _create_listing(client, auth_headers, product["id"])
+    client.post(f"/api/v1/etsy/listings/{listing['id']}/push", json=PUSH_FIELDS, headers=auth_headers)
+
+    from app.core.db import get_db
+
+    db = next(fastapi_app.dependency_overrides[get_db]())
+    sync_row = db.query(EtsyListingSync).one()
+    db.add(
+        EtsyListingImage(
+            etsy_listing_sync_id=sync_row.id,
+            product_image_id=None,
+            etsy_image_id="not-really-there",
+            rank=1,
+        )
+    )
+    db.commit()
+
+    resp = client.post(f"/api/v1/etsy/listings/{listing['id']}/activate", headers=auth_headers)
+    assert resp.status_code == 502
+    assert "at least one image" in str(resp.json()["detail"])
+
+
+def test_activating_an_unpushed_listing_is_refused(client, auth_headers, product_photos):
+    _connect_shop(client, auth_headers)
+    product = _create_product(client, auth_headers)
+    listing = _create_listing(client, auth_headers, product["id"])
+
+    resp = client.post(f"/api/v1/etsy/listings/{listing['id']}/activate", headers=auth_headers)
+    assert resp.status_code == 409
+    assert "hasn't been pushed" in resp.json()["detail"]
+
+
+def test_activate_requires_staff_auth(client):
+    assert client.post(f"/api/v1/etsy/listings/{uuid.uuid4()}/activate").status_code == 401

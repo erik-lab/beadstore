@@ -95,6 +95,14 @@ export interface EtsyListingSync {
   sync_status: EtsySyncStatus;
   last_synced_at: string | null;
   last_error: string | null;
+  /** Etsy's own state: draft until activated, then active or inactive. */
+  etsy_state: string | null;
+}
+
+export interface EtsyActivateResult {
+  catalog_listing_id: string;
+  etsy_listing_id: string | null;
+  etsy_state: string | null;
 }
 
 /**

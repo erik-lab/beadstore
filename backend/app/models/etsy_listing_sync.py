@@ -30,6 +30,11 @@ class EtsyListingSync(UUIDPKMixin, TimestampMixin, Base):
     )
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Etsy's own state for the listing: draft until activated, then active or
+    # inactive. Recorded rather than inferred, because activation is a
+    # deliberate act with a fee attached and the UI needs to show whether it
+    # has happened.
+    etsy_state: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Etsy-required fields for createDraftListing — see
     # https://developers.etsy.com/documentation/reference/#operation/createDraftListing

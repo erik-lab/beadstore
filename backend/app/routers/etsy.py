@@ -23,6 +23,7 @@ from app.models.etsy_account import EtsyAccount
 from app.models.etsy_listing_sync import EtsyListingSync
 from app.schemas.etsy import (
     EtsyAccountRead,
+    EtsyActivateResult,
     EtsyConnectUrlResponse,
     EtsyListingSyncRead,
     EtsyPullResult,
@@ -184,6 +185,27 @@ def get_listing_sync(catalog_listing_id: uuid.UUID, db: Session = Depends(get_db
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This listing has never been pushed to Etsy.")
     return row
+
+
+@router.post(
+    "/listings/{catalog_listing_id}/activate",
+    response_model=EtsyActivateResult,
+    dependencies=[Depends(get_current_user)],
+)
+def activate_listing(catalog_listing_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Make a pushed listing public on Etsy.
+
+    Separate from pushing, and never automatic: going active is what puts the
+    listing in front of buyers and is what Etsy's per-listing fee is charged
+    for. A price or stock sync must not be able to trigger it as a side
+    effect.
+    """
+    sync_row = etsy_sync_service.activate_listing(db, catalog_listing_id)
+    return EtsyActivateResult(
+        catalog_listing_id=catalog_listing_id,
+        etsy_listing_id=sync_row.etsy_listing_id,
+        etsy_state=sync_row.etsy_state,
+    )
 
 
 @router.post("/pull", response_model=EtsyPullResult, dependencies=[Depends(get_current_user)])

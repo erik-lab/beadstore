@@ -219,7 +219,7 @@ cd backend
 ./.venv/bin/python -m pytest -q
 ```
 
-301 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
+336 tests covering: auth (including the profile-auto-provisioning race condition), product CRUD
 and validation, inventory unit CRUD and adjustments, purchase order creation and line validation,
 receiving against an existing order (full match, shortage, overage, damaged, substitution,
 unresolved, multiple receipts against the same line reconciling cumulatively), retroactive
@@ -319,9 +319,15 @@ Supabase project:
 - No pagination controls in the UI yet, though list endpoints support `limit`/`offset`.
 - Product photos have storage, an API and an upload UI (see
   `docs/design/product-images.md`), but **nothing pushes them to Etsy yet** — that needs
-  `uploadListingImage` and `updateListing(state=active)`. The older `image_url` / `image_status` /
-  `media_notes` columns on `products` are superseded by the `product_images` table and remain
-  unused.
+  `uploadListingImage` and `updateListing(state=active)` — both now implemented and driven against
+  the simulator. The older `image_url` / `image_status` / `media_notes` columns on `products` are
+  superseded by the `product_images` table and remain unused.
+- Activating an Etsy listing is deliberately a separate action from pushing one, and never
+  automatic: going active is what Etsy's per-listing fee pays for, so a price or stock sync must
+  not be able to trigger it. Pushed listings stay drafts until someone presses Activate.
+- `updateListing`'s `state` parameter is implemented from Etsy's documented listing states but was
+  never confirmed as settable through that call by any published source — if activation fails
+  against the real API, check that first.
 - The Supabase Storage backend has been verified against a real bucket with
   `python -m scripts.check_storage`. The automated tests still drive local-filesystem storage
   only, since CI has no Supabase to reach; what's covered for S3 is the wiring, not a live call.

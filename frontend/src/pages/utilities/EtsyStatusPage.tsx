@@ -5,6 +5,7 @@ import { connectEtsyShop } from "../../lib/etsyConnect";
 import type {
   CatalogListing,
   EtsyAccount,
+  EtsyActivateResult,
   EtsyListingSync,
   EtsyOption,
   EtsyPullResult,
@@ -83,6 +84,10 @@ export function EtsyStatusPage() {
   const [pushError, setPushError] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
 
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [activateResult, setActivateResult] = useState<EtsyActivateResult | null>(null);
+
   const [simulateQuantity, setSimulateQuantity] = useState("1");
   const [simulatePrice, setSimulatePrice] = useState("");
   const [simulating, setSimulating] = useState(false);
@@ -121,6 +126,27 @@ export function EtsyStatusPage() {
       setPullError(err instanceof ApiError ? String(err.detail) : "Could not pull orders.");
     } finally {
       setPulling(false);
+    }
+  }
+
+  async function handleActivate() {
+    setActivateError(null);
+    setActivateResult(null);
+    if (!listingId) {
+      setActivateError("Choose a listing above first.");
+      return;
+    }
+    setActivating(true);
+    try {
+      setActivateResult(
+        await api.post<EtsyActivateResult>(`/etsy/listings/${listingId}/activate`),
+      );
+    } catch (err) {
+      setActivateError(
+        err instanceof ApiError ? String(err.detail) : "Could not activate the listing.",
+      );
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -346,8 +372,41 @@ export function EtsyStatusPage() {
           <p className="page-subtitle" style={{ marginTop: 8 }}>
             Sync status: <StatusBadge status={pushResult.sync_status} /> — Etsy listing ID:{" "}
             {pushResult.etsy_listing_id ?? "—"}
+            {pushResult.etsy_state ? ` — on Etsy this listing is a ${pushResult.etsy_state}` : ""}
           </p>
         )}
+      </section>
+
+      <section className="detail-section">
+        <h2>Make a Listing Live</h2>
+        <p className="page-subtitle">
+          A pushed listing starts as a <strong>draft</strong>: it's on Etsy but nobody can see it.
+          Activating is what puts it in front of buyers. Etsy needs the listing to have at least one
+          photo first — photos are sent automatically whenever you push, taken from the product's
+          Photos section.
+        </p>
+        <div className="alert alert-warn">
+          Against a real Etsy shop, activating a listing is what Etsy charges its per-listing fee
+          for. Drafts are free. That's why this is a separate button and never happens
+          automatically when you push.
+        </div>
+        {activateError && <div className="alert alert-error">{activateError}</div>}
+        {activateResult && (
+          <div className="alert alert-success">
+            Listing {activateResult.etsy_listing_id} is now{" "}
+            <strong>{activateResult.etsy_state}</strong> on Etsy.
+          </div>
+        )}
+        <div className="form-card">
+          <p className="page-subtitle">
+            Uses the listing selected under “Push a Listing” above.
+          </p>
+          <div className="maintenance-row">
+            <button className="btn-primary" onClick={handleActivate} disabled={activating}>
+              {activating ? "Activating..." : "Activate on Etsy"}
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="detail-section">

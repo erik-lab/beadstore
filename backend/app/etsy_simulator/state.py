@@ -16,6 +16,7 @@ ACCESS_TOKEN_TTL_SECONDS = 3600
 _listing_id_counter = itertools.count(10_000_000)
 _receipt_id_counter = itertools.count(4_000_000_000)
 _transaction_id_counter = itertools.count(5_000_000_000)
+_image_id_counter = itertools.count(7_000_000)
 
 
 class Store:
@@ -40,6 +41,9 @@ class Store:
 
     def next_transaction_id(self) -> str:
         return str(next(_transaction_id_counter))
+
+    def next_image_id(self) -> str:
+        return str(next(_image_id_counter))
 
     def prune_expired(self):
         now = time.time()

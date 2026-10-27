@@ -211,6 +211,78 @@ def update_listing_inventory(shop_id: str, listing_id: str, access_token: str, p
     return resp.json()
 
 
+def upload_listing_image(
+    shop_id: str,
+    listing_id: str,
+    access_token: str,
+    *,
+    data: bytes,
+    filename: str,
+    content_type: str,
+    rank: int,
+    alt_text: str | None = None,
+) -> dict:
+    """Attach one photo to a listing.
+
+    Multipart, unlike every other call here — Etsy takes the file itself
+    rather than a URL, which is also why the bytes have to come back out of
+    our own storage first.
+
+    `rank` is Etsy's ordering, where 1 is the image shown in search results.
+    There's no separate "set rank" call, so rank is fixed at upload and
+    changing the order means uploading again.
+    """
+    form: dict[str, tuple[None, str]] = {"rank": (None, str(rank))}
+    if alt_text:
+        form["alt_text"] = (None, alt_text)
+    resp = httpx.post(
+        f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/listings/{listing_id}/images",
+        headers=_headers(access_token),
+        files={"image": (filename, data, content_type), **form},
+        timeout=60,
+    )
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Etsy rejected the image ({resp.status_code}): {resp.text[:300]}",
+        )
+    return resp.json()
+
+
+def delete_listing_image(shop_id: str, listing_id: str, image_id: str, access_token: str) -> None:
+    resp = httpx.delete(
+        f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/listings/{listing_id}/images/{image_id}",
+        headers=_headers(access_token),
+        timeout=20,
+    )
+    # 404 means it's already gone, which is the state we wanted.
+    if not resp.is_success and resp.status_code != 404:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Etsy refused to delete the image ({resp.status_code}): {resp.text[:300]}",
+        )
+
+
+def update_listing(shop_id: str, listing_id: str, access_token: str, payload: dict) -> dict:
+    """Change a listing — including `state`, which is how it goes live.
+
+    Etsy's listing states are draft, active and inactive. A listing can only
+    become active once it has at least one image.
+    """
+    resp = httpx.patch(
+        f"{settings.etsy_api_base_url}/v3/application/shops/{shop_id}/listings/{listing_id}",
+        headers=_headers(access_token),
+        json=payload,
+        timeout=20,
+    )
+    if not resp.is_success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Etsy rejected the listing update ({resp.status_code}): {resp.text[:300]}",
+        )
+    return resp.json()
+
+
 def get_shop_receipts(shop_id: str, access_token: str, min_created: int | None = None, limit: int = 25, offset: int = 0) -> dict:
     params = {"limit": limit, "offset": offset}
     if min_created is not None:

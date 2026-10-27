@@ -9,10 +9,11 @@ from app.core.crypto import decrypt_token, encrypt_token
 from app.models.catalog_listing import CatalogListing
 from app.models.enums import EtsyAccountStatus, EtsySyncStatus, SaleChannel
 from app.models.etsy_account import EtsyAccount
+from app.models.etsy_listing_image import EtsyListingImage
 from app.models.etsy_listing_sync import EtsyListingSync
 from app.models.sale import Sale
 from app.schemas.sale import SaleCreate, SaleLineInput
-from app.services import etsy_service
+from app.services import etsy_service, image_service
 from app.services.catalog_service import attach_derived_availability
 from app.services.sales_service import create_sale
 from app.services.storefront_service import public_available_quantity
@@ -242,6 +243,17 @@ def push_listing(db: Session, catalog_listing_id: uuid.UUID, overrides: dict | N
             access_token,
             {"products": [inventory_product]},
         )
+
+        # Photos, which a listing can't go active without. Part of the push
+        # rather than its own step because uploading costs nothing and the
+        # listing is useless without them — activation is the separate,
+        # deliberate act.
+        image_result = sync_listing_images(db, sync_row, access_token)
+
+        if sync_row.etsy_state is None:
+            # createDraftListing's state. Recorded so the UI can tell a draft
+            # from a live listing without asking Etsy.
+            sync_row.etsy_state = "draft"
         sync_row.sync_status = EtsySyncStatus.synced
         sync_row.last_synced_at = datetime.now(timezone.utc)
         sync_row.last_error = None
@@ -251,6 +263,124 @@ def push_listing(db: Session, catalog_listing_id: uuid.UUID, overrides: dict | N
         db.commit()
         raise
 
+    db.commit()
+    db.refresh(sync_row)
+    return sync_row
+
+
+def sync_listing_images(db: Session, sync_row: EtsyListingSync, access_token: str) -> dict:
+    """Make Etsy's images for this listing match the product's photos.
+
+    Etsy fixes an image's rank at upload and offers no way to reorder an
+    existing one, so there are only two honest options: leave the order wrong,
+    or re-upload. This compares what was last sent against what the product
+    now has, and when they differ — a photo added, removed, replaced, or
+    reordered — deletes Etsy's copies and uploads the current set in order.
+
+    When they match, it does nothing at all, which is the common case: a push
+    that only changes price or quantity doesn't touch the images.
+    """
+    if sync_row.etsy_listing_id is None:
+        return {"uploaded": 0, "deleted": 0, "unchanged": 0}
+
+    product_id = sync_row.catalog_listing.product_id
+    desired = image_service.list_images(db, product_id)
+
+    recorded = (
+        db.query(EtsyListingImage)
+        .filter(EtsyListingImage.etsy_listing_sync_id == sync_row.id)
+        .order_by(EtsyListingImage.rank)
+        .all()
+    )
+
+    # Compared on checksum rather than id, so replacing a photo with a
+    # different one counts as a change even at the same position.
+    if [row.checksum for row in recorded] == [image.checksum for image in desired]:
+        return {"uploaded": 0, "deleted": 0, "unchanged": len(recorded)}
+
+    deleted = 0
+    for row in recorded:
+        etsy_service.delete_listing_image(
+            sync_row.etsy_shop_id, sync_row.etsy_listing_id, row.etsy_image_id, access_token
+        )
+        db.delete(row)
+        deleted += 1
+    db.flush()
+
+    uploaded = 0
+    for position, image in enumerate(desired[: image_service.MAX_IMAGES_PER_PRODUCT], start=1):
+        result = etsy_service.upload_listing_image(
+            sync_row.etsy_shop_id,
+            sync_row.etsy_listing_id,
+            access_token,
+            data=image_service.read_image_bytes(image),
+            filename=image.original_filename or f"{image.id}.jpg",
+            content_type=image.content_type,
+            rank=position,
+            alt_text=image.alt_text,
+        )
+        db.add(
+            EtsyListingImage(
+                etsy_listing_sync_id=sync_row.id,
+                product_image_id=image.id,
+                etsy_image_id=str(result.get("listing_image_id") or result.get("image_id") or ""),
+                rank=position,
+                checksum=image.checksum,
+            )
+        )
+        uploaded += 1
+
+    db.flush()
+    return {"uploaded": uploaded, "deleted": deleted, "unchanged": 0}
+
+
+def activate_listing(db: Session, catalog_listing_id: uuid.UUID) -> EtsyListingSync:
+    """Make a pushed listing public on Etsy.
+
+    Deliberately separate from pushing, and never automatic. Going active is
+    what puts the listing in front of buyers and is what Etsy charges its
+    per-listing fee for — not a side effect a price sync should be able to
+    trigger.
+    """
+    sync_row = (
+        db.query(EtsyListingSync)
+        .filter(EtsyListingSync.catalog_listing_id == catalog_listing_id)
+        .first()
+    )
+    if sync_row is None or sync_row.etsy_listing_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This listing hasn't been pushed to Etsy yet, so there's nothing to activate.",
+        )
+
+    image_count = (
+        db.query(EtsyListingImage).filter(EtsyListingImage.etsy_listing_sync_id == sync_row.id).count()
+    )
+    if image_count == 0:
+        # Etsy refuses this anyway; saying so here is clearer than relaying
+        # its error, and explains what to do about it.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Etsy won't show a listing with no photos. Add at least one photo to the product "
+                "and push again, then activate."
+            ),
+        )
+
+    account = get_active_account_or_error(db)
+    access_token = _access_token_for(db, account)
+
+    try:
+        result = etsy_service.update_listing(
+            sync_row.etsy_shop_id, sync_row.etsy_listing_id, access_token, {"state": "active"}
+        )
+    except HTTPException as exc:
+        sync_row.last_error = str(exc.detail)
+        db.commit()
+        raise
+
+    sync_row.etsy_state = result.get("state") or "active"
+    sync_row.last_error = None
     db.commit()
     db.refresh(sync_row)
     return sync_row
