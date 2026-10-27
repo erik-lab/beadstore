@@ -9,8 +9,9 @@ That costs CPU and buys three things:
   format that has several places to hide them.
 - **It proves the file is really an image.** A decode that succeeds is
   stronger than trusting a declared content type or a magic-byte check.
-- **Oversized photos get shrunk once**, here, instead of every viewer
-  downloading 12 megapixels of bead.
+- **Oversized photos get shrunk**, here, instead of every viewer downloading
+  12 megapixels of bead, and the result is held to a byte budget so stored
+  photos are predictably sized however they arrived.
 
 Pillow is imported lazily, so a virtualenv without it leaves the rest of the
 app working and gives a clear message on the one feature that needs it.
@@ -27,14 +28,30 @@ from app.core.storage import StorageError, get_object_store
 from app.models.product import Product
 from app.models.product_image import ProductImage
 
-# Etsy recommends at least 2000px on the shortest side so its zoom works, and
-# there's no point holding more than that.
-MAX_DIMENSION = 2400
-# Checked against the decoded pixel count before any resize, since a small
-# file can decompress into an enormous bitmap (a "decompression bomb").
+# Etsy's guidance is about 2000px on the SHORTEST side, so its zoom has
+# something to work with. Capping the longest side is what we can actually do
+# cheaply, and 2400 wasn't enough to deliver that: a 4:3 photo came out
+# 2400x1800. 2700 keeps the common 4:3 and 3:2 shapes just over 2000 on the
+# short side without storing detail no viewer will ever see.
+MAX_DIMENSION = 2700
+# Floor for the byte-budget shrink below, so a stubborn image ends up smaller
+# rather than useless.
+MIN_DIMENSION = 1600
+# Checked against the dimensions in the file header, BEFORE decoding, since a
+# small file can decompress into an enormous bitmap (a "decompression bomb").
+# Checking after the decode is no protection at all: a 48MP phone photo is
+# ~145MB of RGB, and rejecting it once it's already resident is how a small
+# instance runs out of memory.
 MAX_PIXELS = 50_000_000
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+# A soft target, not a limit — nothing is rejected for exceeding it. Etsy's
+# uploader is reported to warn above about 1MB, and Patti will be loading
+# these over shop wifi on a phone, so it's worth a few quality points to stay
+# near it.
+TARGET_BYTES = 1_000_000
 JPEG_QUALITY = 88
+# Quality floor. Below this, visible artefacts cost more than the bytes save.
+MIN_JPEG_QUALITY = 70
 
 # What we accept in, keyed to how Pillow names the format. Everything is
 # re-encoded to JPEG except PNG, which is kept for images with transparency.
@@ -93,6 +110,79 @@ def _bad_image(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
+def _uses_transparency(image) -> bool:
+    """Is the alpha channel actually doing anything?
+
+    Testing the mode alone isn't enough. Screenshots, and anything exported
+    from Photoshop or Canva, are routinely RGBA with a fully opaque alpha
+    channel. Those were taking the PNG branch, where there's no quality dial,
+    so an ordinary photo stored at 8-12MB instead of a few hundred KB. That
+    was the main reason stored photos varied so much in size.
+    """
+    if image.mode not in ("RGBA", "LA", "PA") and not (
+        image.mode == "P" and "transparency" in image.info
+    ):
+        return False
+    # Converting is the accurate test for palette modes, where the declared
+    # transparent index may not appear in any pixel.
+    alpha = image.getchannel("A") if image.mode in ("RGBA", "LA") else (
+        image.convert("RGBA").getchannel("A")
+    )
+    return alpha.getextrema()[0] < 255
+
+
+def _encode(image, Image, transparent: bool) -> tuple[bytes, str]:
+    """Re-encode to a sensibly sized file.
+
+    JPEG has a quality dial, so an over-budget photo gets a few steps of
+    quality rather than a smaller picture. PNG has no such dial — the only
+    lever for a genuinely transparent image is dimensions, so it shrinks
+    instead, down to MIN_DIMENSION and no further.
+    """
+    if transparent:
+        # Kept as PNG: flattening transparency onto white would wreck a
+        # cut-out product shot.
+        working = image.convert("RGBA")
+        while True:
+            buffer = io.BytesIO()
+            working.save(buffer, format="PNG", optimize=True)
+            data = buffer.getvalue()
+            if len(data) <= TARGET_BYTES or max(working.size) <= MIN_DIMENSION:
+                return data, "image/png"
+            target = max(int(max(working.size) * 0.85), MIN_DIMENSION)
+            working.thumbnail((target, target), Image.LANCZOS)
+
+    working = image.convert("RGB")
+    quality = JPEG_QUALITY
+    while True:
+        buffer = io.BytesIO()
+        working.save(
+            buffer, format="JPEG", quality=quality, optimize=True, progressive=True
+        )
+        data = buffer.getvalue()
+        if len(data) <= TARGET_BYTES or quality <= MIN_JPEG_QUALITY:
+            return data, "image/jpeg"
+        quality -= 6
+
+
+def _check_decodable(size: tuple[int, int], image_format: str, filename: str) -> None:
+    """Reject on the header, before any pixels are allocated.
+
+    Both of these used to be checked after `load()`, which meant an image too
+    big to process was fully decoded in order to find that out.
+    """
+    if image_format and image_format not in ACCEPTED_FORMATS:
+        raise _bad_image(f"'{image_format}' images aren't supported. Try JPEG, PNG or HEIC.")
+
+    width, height = size
+    if width * height > MAX_PIXELS:
+        raise _bad_image(
+            f"'{filename or 'That image'}' is {width}x{height} ({width * height / 1_000_000:.0f} "
+            f"megapixels), over the {MAX_PIXELS // 1_000_000} megapixel limit. Export it at a "
+            "smaller size."
+        )
+
+
 def process_image(data: bytes, filename: str = "") -> tuple[bytes, str, int, int]:
     """Decode, orient, shrink and re-encode. Returns (bytes, content_type, w, h)."""
     if not data:
@@ -114,7 +204,21 @@ def process_image(data: bytes, filename: str = "") -> tuple[bytes, str, int, int
 
     try:
         source = Image.open(io.BytesIO(data))
+        # open() parses the header only, so the dimensions are known here and
+        # the bomb check below costs nothing. Everything that must happen
+        # before pixels are allocated happens between open() and load().
+        header_size = source.size
+        image_format = (source.format or "").upper()
+        _check_decodable(header_size, image_format, filename)
+        # Lets the JPEG decoder work at 1/2, 1/4 or 1/8 scale instead of
+        # decoding full size and throwing most of it away: for a big phone
+        # photo that's several times less memory and CPU for an identical
+        # result, since we were going to shrink it anyway. A no-op for formats
+        # that don't support it.
+        source.draft("RGB", (MAX_DIMENSION, MAX_DIMENSION))
         source.load()
+    except HTTPException:
+        raise
     except Exception:  # noqa: BLE001 - Pillow raises many types for bad input
         # HEIC gets its own message: it's what an iPhone shoots by default,
         # so "unreadable" is misleading when the real answer is a missing
@@ -134,42 +238,23 @@ def process_image(data: bytes, filename: str = "") -> tuple[bytes, str, int, int
             "JPEG, PNG, WEBP, HEIC and TIFF all work."
         )
 
-    image_format = (source.format or "").upper()
-    if image_format and image_format not in ACCEPTED_FORMATS:
-        raise _bad_image(f"'{image_format}' images aren't supported. Try JPEG, PNG or HEIC.")
-
-    if source.width * source.height > MAX_PIXELS:
-        raise _bad_image(
-            f"'{filename or 'That image'}' is {source.width}x{source.height}, which is too large "
-            "to process. Export it at a smaller size."
-        )
-
     # Phones record orientation as an EXIF tag instead of rotating pixels, so
     # this has to be applied before the metadata is discarded or the photo
     # ends up sideways on Etsy.
     source = ImageOps.exif_transpose(source)
 
-    has_alpha = source.mode in ("RGBA", "LA", "PA") or (
-        source.mode == "P" and "transparency" in source.info
-    )
+    transparent = _uses_transparency(source)
 
     if max(source.size) > MAX_DIMENSION:
         source.thumbnail((MAX_DIMENSION, MAX_DIMENSION), Image.LANCZOS)
 
-    buffer = io.BytesIO()
-    if has_alpha:
-        # Kept as PNG: flattening transparency onto white would wreck a
-        # cut-out product shot.
-        source.convert("RGBA").save(buffer, format="PNG", optimize=True)
-        content_type = "image/png"
-    else:
-        source.convert("RGB").save(
-            buffer, format="JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True
-        )
-        content_type = "image/jpeg"
-
     # A new image built from pixels alone — no EXIF, no GPS, no thumbnails.
-    return buffer.getvalue(), content_type, source.width, source.height
+    # _encode may shrink further to meet the byte budget, so the dimensions
+    # recorded have to come from what it produced, not from `source`.
+    processed, content_type = _encode(source, Image, transparent)
+    with Image.open(io.BytesIO(processed)) as final:
+        width, height = final.size
+    return processed, content_type, width, height
 
 
 def _extension_for(content_type: str) -> str:

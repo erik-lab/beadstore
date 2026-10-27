@@ -78,20 +78,64 @@ That costs CPU and buys three things:
    format with several places to hide them.
 2. **It proves the file is an image.** A successful decode is a stronger
    check than a declared content type or magic bytes.
-3. **Oversized photos shrink once**, here, rather than every viewer
-   downloading 12 megapixels of bead. Capped at 2400px, since Etsy wants
-   ≥2000px on the short side for its zoom and there's no point holding more.
+3. **Oversized photos shrink**, here, rather than every viewer downloading 12
+   megapixels of bead, and the output is held to a byte budget so what's
+   stored is predictably sized however it arrived.
 
 Orientation is applied **before** metadata is discarded: phones record
 rotation as an EXIF tag instead of rotating pixels, so dropping EXIF first
 would leave photos sideways on Etsy.
 
-Transparency is preserved by keeping those images as PNG — flattening a
-cut-out product shot onto white would ruin it. Everything else becomes
-progressive JPEG at quality 88.
+Limits: 15MB per upload, 50M pixels (checked on the header — see below), 10
+images per product because that's Etsy's ceiling.
 
-Limits: 15MB per upload, 50M pixels decoded (a small file can decompress into
-an enormous bitmap), 10 images per product because that's Etsy's ceiling.
+### Sizing
+
+`MAX_DIMENSION` caps the **longest** side at 2700. The number comes from
+Etsy's guidance of roughly 2000px on the *shortest* side, so its zoom has
+something to work with — which is a different quantity, and the earlier cap of
+2400 didn't deliver it: a 4:3 photo came out 2400×1800, short side 1800. 2700
+keeps 4:3 and 3:2 just over 2000 without storing detail no viewer sees.
+
+Output is then held near `TARGET_BYTES` (1MB), which is Etsy's reported
+uploader warning threshold and also what Patti will be loading over shop wifi.
+It's a **soft** target — nothing is ever rejected for exceeding it:
+
+- JPEG has a quality dial, so an over-budget photo gets quality steps from 88
+  down to a floor of 70. On realistic photos the loop never engages at all:
+  a 12MP shot lands at ~430KB and a 48MP shot at ~240KB (bigger input, smaller
+  output — downscaling averages away sensor grain). Only incompressible
+  near-noise reaches the floor and overshoots, and there the floor is the
+  right answer.
+- PNG has no quality dial, so a genuinely transparent image that's over budget
+  shrinks instead, down to `MIN_DIMENSION` (1600) and no further.
+
+Transparency is preserved as PNG — flattening a cut-out product shot onto
+white would ruin it. **But the test is whether the alpha channel is actually
+used, not what mode the image is in.** Screenshots and exports from Photoshop
+or Canva are routinely RGBA with a fully opaque alpha channel; testing the
+mode alone sent those down the PNG branch, where there's no quality dial, and
+stored an ordinary photo at 8–12MB instead of a few hundred KB. That was the
+main reason stored photos varied wildly in size.
+
+### Decoding large photos cheaply
+
+Two things make a big upload affordable on a small instance, and both have to
+happen in the window between `Image.open()` (which parses the header only) and
+`load()` (which allocates pixels):
+
+- **The megapixel guard runs on the header.** It used to run after `load()`,
+  which is no guard at all: a 48MP photo is ~145MB of RGB, so an image too big
+  to process was fully decoded in order to discover that. Pillow's own
+  `MAX_IMAGE_PIXELS` only *raises* at double the limit, so it didn't cover the
+  gap either.
+- **`draft()` lets the JPEG decoder work at 1/2, 1/4 or 1/8 scale** instead of
+  decoding full size and throwing most of it away — free, since we were going
+  to shrink it anyway. Measured on a 48MP photo: **peak RSS 287MB → 116MB**
+  for identical output. A no-op for formats that don't support it.
+
+Together those are what keep concurrent uploads from exhausting a 512MB
+instance, which is the shape the "capacity on Render" symptom took.
 
 ### iPhone formats
 

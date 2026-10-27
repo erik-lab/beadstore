@@ -6,6 +6,7 @@ worth exercising, since the Supabase one can't be reached from here.
 """
 import base64
 import builtins
+import random
 import sys
 import io
 import uuid
@@ -285,6 +286,109 @@ def test_an_oversized_upload_is_rejected():
     with pytest.raises(Exception) as exc:
         image_service.process_image(b"x" * (image_service.MAX_UPLOAD_BYTES + 1), "huge.jpg")
     assert exc.value.status_code == 413
+
+
+def test_an_opaque_alpha_channel_does_not_force_png():
+    """The expensive mistake: mode RGBA with nothing transparent in it.
+
+    Screenshots and exports from Photoshop or Canva are routinely RGBA with a
+    fully opaque alpha channel. Testing the mode alone sent those down the PNG
+    branch, which has no quality dial, so an ordinary photo was stored at
+    megabytes instead of a few hundred KB.
+    """
+    image = Image.new("RGBA", (900, 700))
+    # Detail, so the result can't be small merely because it's a flat fill.
+    rng = random.Random(3)
+    image.putdata(
+        [(rng.randrange(256), rng.randrange(256), rng.randrange(256), 255) for _ in range(900 * 700)]
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    processed, content_type, _, _ = image_service.process_image(buffer.getvalue(), "screen.png")
+
+    assert content_type == "image/jpeg"
+    assert len(processed) < len(buffer.getvalue())
+
+
+def test_a_partly_transparent_image_is_still_png():
+    """The counterpart: one transparent pixel is enough to need PNG."""
+    image = Image.new("RGBA", (200, 200), (10, 200, 120, 255))
+    image.putpixel((0, 0), (10, 200, 120, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+
+    _, content_type, _, _ = image_service.process_image(buffer.getvalue(), "cutout.png")
+
+    assert content_type == "image/png"
+
+
+def test_an_over_budget_photo_gets_quality_steps():
+    """A detailed photo is stored smaller rather than at whatever size it lands.
+
+    This has to use a hard-to-compress image: the flat fills elsewhere in this
+    file encode to a few KB, so a budget test built on one would pass whether
+    or not any budget code existed.
+    """
+    rng = random.Random(11)
+    noisy = Image.new("RGB", (2000, 2000))
+    noisy.putdata(
+        [(rng.randrange(256), rng.randrange(256), rng.randrange(256)) for _ in range(2000 * 2000)]
+    )
+
+    at_full_quality = io.BytesIO()
+    noisy.save(
+        at_full_quality,
+        format="JPEG",
+        quality=image_service.JPEG_QUALITY,
+        optimize=True,
+        progressive=True,
+    )
+    assert len(at_full_quality.getvalue()) > image_service.TARGET_BYTES, (
+        "fixture is not over budget, so this test proves nothing"
+    )
+
+    encoded, content_type = image_service._encode(noisy, Image, transparent=False)
+
+    assert content_type == "image/jpeg"
+    # Can't assert it reached the budget — noise this incompressible doesn't,
+    # and the quality floor is deliberate. What matters is that it tried.
+    assert len(encoded) < len(at_full_quality.getvalue())
+
+
+def test_too_many_megapixels_is_rejected_before_the_decode():
+    """The guard has to act on the header, not on a decoded bitmap.
+
+    Checking after `load()` meant an image too big to process was fully
+    decoded in order to discover that — ~145MB of RGB for a 48MP photo, on an
+    instance with 512MB. The point of this test is the *reason* it's cheap:
+    a tiny file declaring enormous dimensions is refused without allocating
+    them, so it passes quickly or not at all.
+    """
+    side = int((image_service.MAX_PIXELS * 2) ** 0.5)
+    # A flat fill compresses to almost nothing, so this file is small while
+    # its header claims far more pixels than we'll decode.
+    buffer = io.BytesIO()
+    Image.new("RGB", (side, side)).save(buffer, format="JPEG", quality=10)
+    assert len(buffer.getvalue()) < image_service.MAX_UPLOAD_BYTES
+
+    with pytest.raises(Exception) as exc:
+        image_service.process_image(buffer.getvalue(), "enormous.jpg")
+    assert exc.value.status_code == 400
+    assert "megapixel" in exc.value.detail
+
+
+def test_a_shrunk_photo_clears_etsys_recommended_short_side():
+    """MAX_DIMENSION caps the LONGEST side, so the short side is what to check.
+
+    At 2400 a 4:3 photo came out 2400x1800, leaving the short side under the
+    2000px Etsy suggests for its zoom — which the constant's own comment
+    claimed it was delivering.
+    """
+    _, _, width, height = image_service.process_image(
+        make_image_bytes(size=(4000, 3000)), "big43.jpg"
+    )
+    assert min(width, height) >= 2000
 
 
 # --------------------------------------------------------------------------
