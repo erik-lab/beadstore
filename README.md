@@ -27,6 +27,21 @@ or a CORS error (backend not expecting that origin) — see **Troubleshooting**.
 
 ### 1. Backend
 
+On **Windows**, substituting `Scripts` for `bin`:
+
+```bash
+cd backend
+python -m venv .venv
+./.venv/Scripts/pip install -r requirements.txt
+cp .env.example .env   # edit values, see Environment Variables below
+./.venv/Scripts/alembic upgrade head
+./.venv/Scripts/python scripts/seed.py
+./.venv/Scripts/python scripts/seed_attribute_picklists.py
+./.venv/Scripts/uvicorn app.main:app --reload --port 8123
+```
+
+On **macOS / Linux**:
+
 ```bash
 cd backend
 python3 -m venv .venv
@@ -74,10 +89,24 @@ and local SQLite DB all persist on disk. Just:
 > dependency (`openpyxl`) and a migration — without the former, `.xlsx` uploads return a 503
 > explaining it while every other format keeps working.
 
+**Windows** (Git Bash or PowerShell) — the venv's executables are in `Scripts/`:
+
 ```bash
 # backend
 cd backend
-./.venv/bin/uvicorn app.main:app --reload --port 8123     # Scripts/ instead of bin/ on Windows
+./.venv/Scripts/uvicorn app.main:app --reload --port 8123
+
+# frontend (separate terminal)
+cd frontend
+npm run dev -- --port 5193
+```
+
+**macOS / Linux** — same thing, but `bin/`:
+
+```bash
+# backend
+cd backend
+./.venv/bin/uvicorn app.main:app --reload --port 8123
 
 # frontend (separate terminal)
 cd frontend
